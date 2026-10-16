@@ -118,9 +118,18 @@ if ($gitCmd -and (Test-Path $gitCmd)) {
     try {
         & $gitCmd add -f "bin/Release/net8.0-windows/AutoPileCap.dll" "update_info.json"
         & $gitCmd add .
-        & $gitCmd commit -m "Auto update $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
-        & $gitCmd push origin main
-        Write-Host "Pushed update to GitHub! Clients will auto-update when opening Revit." -ForegroundColor Green
+        & $gitCmd commit -m "Auto update $(Get-Date -Format 'yyyy-MM-dd HH:mm')" -q
+        $pushProc = Start-Process $gitCmd -ArgumentList "push origin main" -NoNewWindow -PassThru
+        if ($pushProc.WaitForExit(15000)) {
+            if ($pushProc.ExitCode -eq 0) {
+                Write-Host "Pushed update to GitHub! Clients will auto-update when opening Revit." -ForegroundColor Green
+            } else {
+                Write-Host "Note: git push completed with code $($pushProc.ExitCode)." -ForegroundColor Yellow
+            }
+        } else {
+            $pushProc.Kill()
+            Write-Host "Note: git push timed out waiting for credentials. Open GitHub Desktop and click 'Push origin'." -ForegroundColor Yellow
+        }
     } catch {
         Write-Host "Note: Could not push to GitHub: $_" -ForegroundColor Yellow
     }

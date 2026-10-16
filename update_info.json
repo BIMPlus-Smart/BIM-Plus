@@ -1,5 +1,5 @@
 {
-  "version": "1.1.1",
+  "version": "1.1.2",
   "dllUrl": "https://raw.githubusercontent.com/BIMPlus-Smart/BIM-Plus/main/bin/Release/net8.0-windows/AutoPileCap.dll",
-  "notes": "Updated Stair Rebar button with high-resolution 3D realistic rebar isometric icon"
+  "notes": "High contrast 3D stair rebar ribbon icon with orange/steel rebar cages"
 }

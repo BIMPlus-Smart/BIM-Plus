@@ -1,0 +1,3 @@
+@echo off
+echo Starting Autodesk Revit 2026 with Auto Pile Cap Plugin...
+start "" "C:\Program Files\Autodesk\Revit 2026\Revit.exe"

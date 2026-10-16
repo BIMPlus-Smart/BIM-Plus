@@ -1,0 +1,13 @@
+# Secret developer keys (NEVER SHARE)
+*.secret
+
+# Build outputs
+bin/
+!bin/Release/net8.0-windows/AutoPileCap.dll
+obj/
+Output/
+
+# User-specific
+*.user
+.vs/
+*.old

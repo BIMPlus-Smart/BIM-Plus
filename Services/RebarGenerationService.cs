@@ -1,0 +1,1322 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Structure;
+using AutoPileCap.Models;
+
+namespace AutoPileCap.Services
+{
+    public class RebarGenerationService
+    {
+        private readonly Document _doc;
+
+        public RebarGenerationService(Document doc)
+        {
+            _doc = doc ?? throw new ArgumentNullException(nameof(doc));
+        }
+
+        public List<RebarBarType> GetRebarBarTypes()
+        {
+            return new FilteredElementCollector(_doc)
+                .OfClass(typeof(RebarBarType))
+                .Cast<RebarBarType>()
+                .OrderBy(b => b.BarNominalDiameter)
+                .ToList();
+        }
+
+        public List<RebarHookType> GetRebarHookTypes()
+        {
+            return new FilteredElementCollector(_doc)
+                .OfClass(typeof(RebarHookType))
+                .Cast<RebarHookType>()
+                .Where(h => !h.Name.Contains("Stirrup", StringComparison.OrdinalIgnoreCase) && !h.Name.Contains("Tie", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(h => h.Name)
+                .ToList();
+        }
+
+        public bool GetPileCapLocalBounds(
+            Element pileCap,
+            out Transform transform,
+            out double minX, out double maxX,
+            out double minY, out double maxY,
+            out double minZ, out double maxZ)
+        {
+            transform = Transform.Identity; if (pileCap is FamilyInstance fi) transform = fi.GetTransform();
+            minX = double.MaxValue; maxX = double.MinValue;
+            minY = double.MaxValue; maxY = double.MinValue;
+            minZ = double.MaxValue; maxZ = double.MinValue;
+
+            Transform inv = transform.Inverse;
+            bool foundVertices = false;
+
+            var opt = new Options { ComputeReferences = true, DetailLevel = ViewDetailLevel.Fine };
+            GeometryElement geomElem = pileCap.get_Geometry(opt);
+
+            if (geomElem != null)
+            {
+                foreach (GeometryObject obj in geomElem)
+                {
+                    if (obj is Solid solid && solid.Faces.Size > 0)
+                    {
+                        foreach (Edge edge in solid.Edges)
+                        {
+                            var pts = edge.Tessellate();
+                            foreach (XYZ pt in pts)
+                            {
+                                XYZ localPt = inv.OfPoint(pt);
+                                if (localPt.X < minX) minX = localPt.X;
+                                if (localPt.X > maxX) maxX = localPt.X;
+                                if (localPt.Y < minY) minY = localPt.Y;
+                                if (localPt.Y > maxY) maxY = localPt.Y;
+                                if (localPt.Z < minZ) minZ = localPt.Z;
+                                if (localPt.Z > maxZ) maxZ = localPt.Z;
+                                foundVertices = true;
+                            }
+                        }
+                    }
+                    else if (obj is GeometryInstance geomInst)
+                    {
+                        GeometryElement instGeom = geomInst.GetInstanceGeometry();
+                        if (instGeom != null)
+                        {
+                            foreach (GeometryObject instObj in instGeom)
+                            {
+                                if (instObj is Solid instSolid && instSolid.Faces.Size > 0)
+                                {
+                                    foreach (Edge edge in instSolid.Edges)
+                                    {
+                                        var pts = edge.Tessellate();
+                                        foreach (XYZ pt in pts)
+                                        {
+                                            XYZ localPt = inv.OfPoint(pt);
+                                            if (localPt.X < minX) minX = localPt.X;
+                                            if (localPt.X > maxX) maxX = localPt.X;
+                                            if (localPt.Y < minY) minY = localPt.Y;
+                                            if (localPt.Y > maxY) maxY = localPt.Y;
+                                            if (localPt.Z < minZ) minZ = localPt.Z;
+                                            if (localPt.Z > maxZ) maxZ = localPt.Z;
+                                            foundVertices = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!foundVertices)
+            {
+                BoundingBoxXYZ bbox = pileCap.get_BoundingBox(null);
+                if (bbox == null) return false;
+
+                XYZ center = 0.5 * (bbox.Min + bbox.Max);
+                double halfL = 0.5 * (bbox.Max.X - bbox.Min.X);
+                double halfW = 0.5 * (bbox.Max.Y - bbox.Min.Y);
+                double halfH = 0.5 * (bbox.Max.Z - bbox.Min.Z);
+
+                minX = -halfL; maxX = halfL;
+                minY = -halfW; maxY = halfW;
+                minZ = -halfH; maxZ = halfH;
+                transform.Origin = center;
+            }
+
+            return (maxX > minX) && (maxY > minY) && (maxZ > minZ);
+        }
+
+        private Solid GetMainSolid(Element elem)
+        {
+            var opt = new Options { ComputeReferences = true, DetailLevel = ViewDetailLevel.Fine };
+            GeometryElement geomElem = elem.get_Geometry(opt);
+            if (geomElem == null) return null;
+
+            Solid maxSolid = null;
+            double maxVolume = 0;
+
+            foreach (GeometryObject obj in geomElem)
+            {
+                if (obj is Solid solid && solid.Faces.Size > 0 && solid.Volume > maxVolume)
+                {
+                    maxSolid = solid;
+                    maxVolume = solid.Volume;
+                }
+                else if (obj is GeometryInstance geomInst)
+                {
+                    GeometryElement instGeom = geomInst.GetInstanceGeometry();
+                    if (instGeom != null)
+                    {
+                        foreach (GeometryObject instObj in instGeom)
+                        {
+                            if (instObj is Solid instSolid && instSolid.Faces.Size > 0 && instSolid.Volume > maxVolume)
+                            {
+                                maxSolid = instSolid;
+                                maxVolume = instSolid.Volume;
+                            }
+                        }
+                    }
+                }
+            }
+            return maxSolid;
+        }
+
+        private List<Curve> TracePolygon(List<XYZ> vertices, double startDist, double endDist, double minSeg)
+        {
+            List<Curve> result = new List<Curve>();
+            double totalPerimeter = 0;
+            List<double> edgeLengths = new List<double>();
+            
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                double d = vertices[i].DistanceTo(vertices[(i + 1) % vertices.Count]);
+                edgeLengths.Add(d);
+                totalPerimeter += d;
+            }
+            
+            if (totalPerimeter == 0) return result;
+
+            while (startDist < 0) startDist += totalPerimeter;
+            while (endDist < startDist) endDist += totalPerimeter;
+            
+            double sum = 0;
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                if (Math.Abs(startDist - sum) < minSeg) startDist = sum;
+                if (Math.Abs(endDist - sum) < minSeg) endDist = sum;
+                
+                double nextSum = sum + edgeLengths[i];
+                if (Math.Abs(startDist - nextSum) < minSeg) startDist = nextSum;
+                if (Math.Abs(endDist - nextSum) < minSeg) endDist = nextSum;
+                
+                sum = nextSum;
+            }
+            
+            if (endDist <= startDist + minSeg) return result;
+            
+            double currentDist = 0;
+            
+            for (int wrap = 0; wrap < 3; wrap++)
+            {
+                for (int i = 0; i < vertices.Count; i++)
+                {
+                    double edgeLen = edgeLengths[i];
+                    double nextDist = currentDist + edgeLen;
+                    
+                    XYZ p1 = vertices[i];
+                    XYZ p2 = vertices[(i + 1) % vertices.Count];
+                    XYZ dir = (p2 - p1).Normalize();
+                    
+                    if (nextDist > startDist && currentDist < endDist)
+                    {
+                        double overlapStart = Math.Max(currentDist, startDist);
+                        double overlapEnd = Math.Min(nextDist, endDist);
+                        
+                        XYZ segStart = p1 + dir * (overlapStart - currentDist);
+                        XYZ segEnd = p1 + dir * (overlapEnd - currentDist);
+                        
+                        if (segStart.DistanceTo(segEnd) > minSeg / 2.0)
+                        {
+                            result.Add(Line.CreateBound(segStart, segEnd));
+                        }
+                    }
+                    
+                    currentDist = nextDist;
+                    if (currentDist >= endDist) break;
+                }
+                if (currentDist >= endDist) break;
+            }
+            
+            return result;
+        }
+
+        private Solid CreateInnerSolid(Solid mainSolid, double cSide, Transform transform, out CurveLoop innerLoop)
+        {
+            innerLoop = null;
+            PlanarFace bottomFace = null;
+            foreach (Face face in mainSolid.Faces)
+            {
+                if (face is PlanarFace pf && pf.FaceNormal.IsAlmostEqualTo(-transform.BasisZ))
+                {
+                    bottomFace = pf;
+                    break;
+                }
+            }
+
+            if (bottomFace != null)
+            {
+                IList<CurveLoop> loops = bottomFace.GetEdgesAsCurveLoops();
+                if (loops.Count > 0)
+                {
+                    CurveLoop outer = loops.OrderByDescending(l => l.GetExactLength()).First();
+                    
+                    CurveLoop offsetLoop1 = null;
+                    CurveLoop offsetLoop2 = null;
+                    try { offsetLoop1 = CurveLoop.CreateViaOffset(outer, cSide, transform.BasisZ); } catch {}
+                    try { offsetLoop2 = CurveLoop.CreateViaOffset(outer, -cSide, transform.BasisZ); } catch {}
+                    
+                    if (offsetLoop1 != null && offsetLoop1.GetExactLength() < outer.GetExactLength()) innerLoop = offsetLoop1;
+                    else if (offsetLoop2 != null && offsetLoop2.GetExactLength() < outer.GetExactLength()) innerLoop = offsetLoop2;
+                    
+                    if (innerLoop != null)
+                    {
+                        double height = 0;
+                        BoundingBoxXYZ bbox = mainSolid.GetBoundingBox();
+                        if (bbox != null) height = bbox.Max.Z - bbox.Min.Z;
+                        if (height <= 0) height = 100;
+                        
+                        try {
+                            return GeometryCreationUtilities.CreateExtrusionGeometry(new List<CurveLoop> { innerLoop }, transform.BasisZ, height);
+                        } catch { return null; }
+                    }
+                }
+            }
+            return null;
+        }
+        private class BarData
+        {
+            public double Current { get; set; }
+            public double LocStartVal { get; set; }
+            public double LocEndVal { get; set; }
+            public XYZ LocStart { get; set; }
+            public XYZ LocEnd { get; set; }
+        }
+
+
+        private List<Rebar> CreateRebarArray(
+            Element host, Solid mainSolid, Transform transform, RebarBarType barType,
+            XYZ arrayDir, XYZ barDir, XYZ hookDir,
+            double startOffset, double endOffset, double spacing,
+            double minExtent, double maxExtent,
+            XYZ offsetDir, double offsetVal,
+            RebarHookMode hookMode, double hookLen, long hookTypeId,
+            bool viewUnobscured, bool viewAsSolid3D)
+        {
+            var createdRebars = new List<Rebar>();
+            if (barType == null || mainSolid == null) return createdRebars;
+            
+            SolidCurveIntersectionOptions opt = new SolidCurveIntersectionOptions();
+            double minLength = barType.BarNominalDiameter * 5; 
+            
+            double span = endOffset - startOffset;
+            if (span <= 0 || spacing <= 0) return createdRebars;
+
+            int numGaps = (int)Math.Ceiling(span / spacing);
+            double actualSpacing = span / numGaps;
+            int numBars = numGaps + 1;
+
+            var validBars = new List<BarData>();
+
+            for (int i = 0; i < numBars; i++)
+            {
+                double current = startOffset + i * actualSpacing;
+                XYZ pStart = transform.OfPoint(arrayDir * current + barDir * (minExtent - 100) + offsetDir * offsetVal);
+                XYZ pEnd = transform.OfPoint(arrayDir * current + barDir * (maxExtent + 100) + offsetDir * offsetVal);
+                
+                Line testLine = Line.CreateBound(pStart, pEnd);
+                SolidCurveIntersection sci = mainSolid.IntersectWithCurve(testLine, opt);
+                
+                if (sci.SegmentCount > 0)
+                {
+                    Curve segment = sci.GetCurveSegment(0);
+                    XYZ locStart = transform.Inverse.OfPoint(segment.GetEndPoint(0));
+                    XYZ locEnd = transform.Inverse.OfPoint(segment.GetEndPoint(1));
+                    
+                    double locStartVal = locStart.DotProduct(barDir);
+                    double locEndVal = locEnd.DotProduct(barDir);
+                    
+                    if (locStartVal > locEndVal)
+                    {
+                        var temp = locStart; locStart = locEnd; locEnd = temp;
+                        double tempVal = locStartVal; locStartVal = locEndVal; locEndVal = tempVal;
+                    }
+                    
+                    locStartVal = Math.Max(locStartVal, minExtent);
+                    locEndVal = Math.Min(locEndVal, maxExtent);
+                    
+                    if (locEndVal > locStartVal + minLength)
+                    {
+                        validBars.Add(new BarData
+                        {
+                            Current = current,
+                            LocStartVal = locStartVal,
+                            LocEndVal = locEndVal,
+                            LocStart = arrayDir * current + barDir * locStartVal + offsetDir * offsetVal,
+                            LocEnd = arrayDir * current + barDir * locEndVal + offsetDir * offsetVal
+                        });
+                    }
+                }
+            }
+
+            if (validBars.Count == 0) return createdRebars;
+
+            var groups = new List<List<BarData>>();
+            var currentGroup = new List<BarData>();
+
+            foreach (var bar in validBars)
+            {
+                if (currentGroup.Count == 0)
+                {
+                    currentGroup.Add(bar);
+                }
+                else
+                {
+                    var lastBar = currentGroup.Last();
+                    if (Math.Abs(bar.LocStartVal - lastBar.LocStartVal) < 0.02 && 
+                        Math.Abs(bar.LocEndVal - lastBar.LocEndVal) < 0.02)
+                    {
+                        currentGroup.Add(bar);
+                    }
+                    else
+                    {
+                        groups.Add(currentGroup);
+                        currentGroup = new List<BarData> { bar };
+                    }
+                }
+            }
+            if (currentGroup.Count > 0) groups.Add(currentGroup);
+
+            foreach (var group in groups)
+            {
+                var firstBar = group.First();
+                double groupArrayLength = group.Last().Current - firstBar.Current;
+                
+                var curves = new List<Curve>();
+                if (hookMode == RebarHookMode.BentLegs && hookLen > 0)
+                {
+                    XYZ p1Top = transform.OfPoint(firstBar.LocStart + hookDir * hookLen);
+                    XYZ p1 = transform.OfPoint(firstBar.LocStart);
+                    XYZ p2 = transform.OfPoint(firstBar.LocEnd);
+                    XYZ p2Top = transform.OfPoint(firstBar.LocEnd + hookDir * hookLen);
+                    
+                    curves.Add(Line.CreateBound(p1Top, p1));
+                    curves.Add(Line.CreateBound(p1, p2));
+                    curves.Add(Line.CreateBound(p2, p2Top));
+                }
+                else
+                {
+                    curves.Add(Line.CreateBound(transform.OfPoint(firstBar.LocStart), transform.OfPoint(firstBar.LocEnd)));
+                }
+                
+                Rebar rebar = null;
+                if (group.Count > 1)
+                {
+                    rebar = CreateRebarSet(host, barType, curves, transform.OfVector(arrayDir), spacing, groupArrayLength, RebarStyle.Standard, 0);
+                }
+                else
+                {
+                    rebar = CreateRebarSet(host, barType, curves, transform.OfVector(arrayDir), 0, 0, RebarStyle.Standard, 1);
+                }
+
+                if (rebar != null)
+                {
+                    if (hookMode == RebarHookMode.RevitHookType && hookTypeId != -1) TryApplyRebarHook(rebar, hookTypeId);
+                    ApplyRebarVisibility(rebar, viewUnobscured, viewAsSolid3D);
+                    createdRebars.Add(rebar);
+                }
+            }
+            return createdRebars;
+        }
+
+
+        public int GenerateRebarForPileCap(Element pileCap, PileCapRebarConfig config)
+        {
+            if (!GetPileCapLocalBounds(pileCap, out Transform transform,
+                out double minX, out double maxX,
+                out double minY, out double maxY,
+                out double minZ, out double maxZ))
+            {
+                return 0;
+            }
+
+            int rebarCount = 0;
+
+            RebarBarType? botBarTypeX = _doc.GetElement(new ElementId(config.BottomBarTypeXId)) as RebarBarType;
+            RebarBarType? botBarTypeY = _doc.GetElement(new ElementId(config.BottomBarTypeYId)) as RebarBarType ?? botBarTypeX;
+            RebarBarType? topBarTypeX = _doc.GetElement(new ElementId(config.TopBarTypeXId)) as RebarBarType ?? botBarTypeX;
+            RebarBarType? topBarTypeY = _doc.GetElement(new ElementId(config.TopBarTypeYId)) as RebarBarType ?? topBarTypeX;
+            RebarBarType? tieBarType  = _doc.GetElement(new ElementId(config.SideTieBarTypeId)) as RebarBarType ?? botBarTypeX;
+
+            double cBot = GetCoverDistance(pileCap, BuiltInParameter.CLEAR_COVER_BOTTOM, config.CoverBottomFeet);
+            double cTop = GetCoverDistance(pileCap, BuiltInParameter.CLEAR_COVER_TOP, config.CoverTopFeet);
+            double cSide = GetCoverDistance(pileCap, BuiltInParameter.CLEAR_COVER_OTHER, config.CoverSideFeet);
+
+            double dBotX = botBarTypeX?.BarNominalDiameter ?? GeometryHelper.MmToFeet(16);
+            double dBotY = botBarTypeY?.BarNominalDiameter ?? GeometryHelper.MmToFeet(16);
+            double dTopX = topBarTypeX?.BarNominalDiameter ?? GeometryHelper.MmToFeet(16);
+            double dTopY = topBarTypeY?.BarNominalDiameter ?? GeometryHelper.MmToFeet(16);
+            double dTie  = tieBarType?.BarNominalDiameter  ?? GeometryHelper.MmToFeet(12);
+
+            double availableHeight = (maxZ - minZ) - cBot - cTop;
+            
+            // Calculate full height to perfectly align top and bottom hooks (forming closed U-bars)
+            double fullHookBotX = availableHeight - dTopX * 0.5 - dBotX * 0.5;
+            double fullHookBotY = availableHeight - dTopY * 0.5 - dBotY * 0.5;
+            double fullHookTopX = availableHeight - dTopX * 0.5 - dBotX * 0.5;
+            double fullHookTopY = availableHeight - dTopY * 0.5 - dBotY * 0.5;
+            
+            // Prioritize full alignment as requested, but allow user override if they set a very specific large/small value
+            // (If they left it at default 450mm, it will auto-expand to full height)
+            double hookLenBotX = config.BottomHookXFeet < fullHookBotX ? fullHookBotX : Math.Min(config.BottomHookXFeet, availableHeight);
+            double hookLenBotY = config.BottomHookYFeet < fullHookBotY ? fullHookBotY : Math.Min(config.BottomHookYFeet, availableHeight);
+            double hookLenTopX = config.TopHookXFeet < fullHookTopX ? fullHookTopX : Math.Min(config.TopHookXFeet, availableHeight);
+            double hookLenTopY = config.TopHookYFeet < fullHookTopY ? fullHookTopY : Math.Min(config.TopHookYFeet, availableHeight);
+
+            Solid mainSolid = GetMainSolid(pileCap);
+            if (mainSolid == null) return 0;
+            
+            CurveLoop innerLoop = null;
+            Solid innerSolid = CreateInnerSolid(mainSolid, cSide, transform, out innerLoop);
+            
+            bool isRectangular = false;
+            if (innerLoop != null && innerLoop.Count() == 4)
+            {
+                isRectangular = true;
+                var curves = innerLoop.ToList();
+                for (int i = 0; i < 4; i++)
+                {
+                    Curve c1 = curves[i];
+                    Curve c2 = curves[(i + 1) % 4];
+                    XYZ d1 = (c1.GetEndPoint(1) - c1.GetEndPoint(0)).Normalize();
+                    XYZ d2 = (c2.GetEndPoint(1) - c2.GetEndPoint(0)).Normalize();
+                    if (Math.Abs(d1.DotProduct(d2)) > 0.01)
+                    {
+                        isRectangular = false;
+                        break;
+                    }
+                }
+            }
+
+            // If innerSolid fails, fall back to mainSolid (but no perpendicular cover guarantees at angles)
+            Solid intersectSolid = innerSolid ?? mainSolid;
+
+            // 1. Bottom Reinforcement - Direction 1 (Local X)
+            if (config.EnableBottomRebar && botBarTypeX != null)
+            {
+                double z = minZ + cBot + dBotX * 0.5;
+                var rebars = CreateRebarArray(pileCap, intersectSolid, transform, botBarTypeX,
+                    XYZ.BasisY, XYZ.BasisX, XYZ.BasisZ,
+                    minY + cSide + dBotX * 0.5, maxY - cSide - dBotX * 0.5, config.BottomSpacingXFeet,
+                    minX, maxX, XYZ.BasisZ, z,
+                    config.BottomHookMode, hookLenBotX, config.BottomHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+                
+                rebarCount += rebars.Count;
+            }
+
+            // 2. Bottom Reinforcement - Direction 2 (Local Y)
+            if (config.EnableBottomRebar && botBarTypeY != null)
+            {
+                double z = minZ + cBot + dBotX + dBotY * 0.5;
+                var rebars = CreateRebarArray(pileCap, intersectSolid, transform, botBarTypeY,
+                    XYZ.BasisX, XYZ.BasisY, XYZ.BasisZ,
+                    minX + cSide + dBotY * 0.5, maxX - cSide - dBotY * 0.5, config.BottomSpacingYFeet,
+                    minY, maxY, XYZ.BasisZ, z,
+                    config.BottomHookMode, hookLenBotY, config.BottomHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+
+                rebarCount += rebars.Count;
+            }
+
+            // 3. Top Reinforcement - Direction 1 (Local X)
+            if (config.EnableTopRebar && topBarTypeX != null)
+            {
+                double z = maxZ - cTop - dTopX * 0.5;
+                var rebars = CreateRebarArray(pileCap, intersectSolid, transform, topBarTypeX,
+                    XYZ.BasisY, XYZ.BasisX, -XYZ.BasisZ,
+                    minY + cSide + dTopX * 0.5, maxY - cSide - dTopX * 0.5, config.TopSpacingXFeet,
+                    minX, maxX, XYZ.BasisZ, z,
+                    config.TopHookMode, hookLenTopX, config.TopHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+
+                rebarCount += rebars.Count;
+            }
+
+            // 4. Top Reinforcement - Direction 2 (Local Y)
+            if (config.EnableTopRebar && topBarTypeY != null)
+            {
+
+                double z = maxZ - cTop - dTopX - dTopY * 0.5;
+                var rebars = CreateRebarArray(pileCap, intersectSolid, transform, topBarTypeY,
+                    XYZ.BasisX, XYZ.BasisY, -XYZ.BasisZ,
+                    minX + cSide + dTopY * 0.5, maxX - cSide - dTopY * 0.5, config.TopSpacingYFeet,
+                    minY, maxY, XYZ.BasisZ, z,
+                    config.TopHookMode, hookLenTopY, config.TopHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+
+                rebarCount += rebars.Count;
+            }
+
+            // 5. Side / Perimeter Ties (Stirrups) - Exact Polygon Offset (Overlapping U-bars)
+            if (config.EnableSideTies && tieBarType != null)
+            {
+                double zStart = minZ + cBot;
+                double arrayHeight = (maxZ - minZ) - cBot - cTop;
+
+                if (arrayHeight > 0)
+                {
+                    if (innerLoop != null)
+                    {
+                        try
+                        {
+                            XYZ normZ = transform.BasisZ;
+                            double minLength = tieBarType.BarNominalDiameter * 5;
+
+                            // Extract vertices from innerLoop, projecting to zStart
+                            List<XYZ> vertices = new List<XYZ>();
+                            foreach (Curve c in innerLoop)
+                            {
+                                XYZ p = c.GetEndPoint(0);
+                                XYZ locP = transform.Inverse.OfPoint(p);
+                                locP = new XYZ(locP.X, locP.Y, zStart);
+                                XYZ globalP = transform.OfPoint(locP);
+                                
+                                // Clean up tiny segments from the offset polygon
+                                if (vertices.Count == 0 || vertices.Last().DistanceTo(globalP) > minLength)
+                                {
+                                    vertices.Add(globalP);
+                                }
+                            }
+                            
+                            if (vertices.Count > 0 && vertices.First().DistanceTo(vertices.Last()) < minLength)
+                            {
+                                vertices.RemoveAt(vertices.Count - 1); // Merge last to first if too close
+                            }
+
+                            if (vertices.Count >= 3)
+                            {
+                                double totalPerimeter = 0;
+                                for (int i = 0; i < vertices.Count; i++)
+                                    totalPerimeter += vertices[i].DistanceTo(vertices[(i + 1) % vertices.Count]);
+
+                                double overlap = config.SideTieLapLengthFeet;
+                                if (overlap <= 0) overlap = 1.5; // default overlap ~450mm
+                                
+                                // Chain 1: -overlap to L/2 + overlap
+                                List<Curve> curves1 = TracePolygon(vertices, -overlap, (totalPerimeter / 2) + overlap, minLength);
+                                
+                                // Chain 2: L/2 - overlap to L + overlap
+                                List<Curve> curves2 = TracePolygon(vertices, (totalPerimeter / 2) - overlap, totalPerimeter + overlap, minLength);
+                                
+                                bool success = false;
+                                if (curves1.Count > 0)
+                                {
+                                    var tie1 = CreateRebarSet(pileCap, tieBarType, curves1, normZ, 0, arrayHeight, RebarStyle.Standard, config.SideTieQuantity);
+                                    if (tie1 != null) { ApplyRebarVisibility(tie1, config.ViewUnobscured, config.ViewAsSolid3D); rebarCount++; success = true; }
+                                }
+                                
+                                if (curves2.Count > 0)
+                                {
+                                    var tie2 = CreateRebarSet(pileCap, tieBarType, curves2, normZ, 0, arrayHeight, RebarStyle.Standard, config.SideTieQuantity);
+                                    if (tie2 != null) { ApplyRebarVisibility(tie2, config.ViewUnobscured, config.ViewAsSolid3D); rebarCount++; success = true; }
+                                }
+                                
+                                if (!success) throw new Exception("Failed to create freeform ties.");
+                            }
+                            else
+                            {
+                                FallbackGenerateSideTies(pileCap, transform, minX, maxX, minY, maxY, minZ, maxZ, cBot, cTop, cSide, dTie, arrayHeight, zStart, tieBarType, config, ref rebarCount);
+                            }
+                        }
+                        catch
+                        {
+                            FallbackGenerateSideTies(pileCap, transform, minX, maxX, minY, maxY, minZ, maxZ, cBot, cTop, cSide, dTie, arrayHeight, zStart, tieBarType, config, ref rebarCount);
+                        }
+                    }
+                    else
+                    {
+                        FallbackGenerateSideTies(pileCap, transform, minX, maxX, minY, maxY, minZ, maxZ, cBot, cTop, cSide, dTie, arrayHeight, zStart, tieBarType, config, ref rebarCount);
+                    }
+                }
+            }
+
+            return rebarCount;
+        }
+
+        private void FallbackGenerateSideTies(
+            Element pileCap, Transform transform,
+            double minX, double maxX, double minY, double maxY, double minZ, double maxZ,
+            double cBot, double cTop, double cSide, double dTie,
+            double arrayHeight, double zStart, RebarBarType tieBarType,
+            PileCapRebarConfig config, ref int rebarCount)
+        {
+            double x1 = minX + cSide - (dTie * 0.5);
+            double x2 = maxX - cSide + (dTie * 0.5);
+            double y1 = minY + cSide - (dTie * 0.5);
+            double y2 = maxY - cSide + (dTie * 0.5);
+
+            if (x2 > x1 && y2 > y1 && arrayHeight > 0)
+            {
+                double overlapY = (y2 - y1) / 2 + config.SideTieLapLengthFeet / 2;
+                overlapY = Math.Min(overlapY, y2 - y1); 
+
+                XYZ t1 = transform.OfPoint(new XYZ(x1, y2 - overlapY, zStart));
+                XYZ t2 = transform.OfPoint(new XYZ(x1, y2, zStart));
+                XYZ t3 = transform.OfPoint(new XYZ(x2, y2, zStart));
+                XYZ t4 = transform.OfPoint(new XYZ(x2, y2 - overlapY, zStart));
+
+                var curvesTop = new List<Curve> { Line.CreateBound(t1, t2), Line.CreateBound(t2, t3), Line.CreateBound(t3, t4) };
+
+                XYZ b1 = transform.OfPoint(new XYZ(x2, y1 + overlapY, zStart));
+                XYZ b2 = transform.OfPoint(new XYZ(x2, y1, zStart));
+                XYZ b3 = transform.OfPoint(new XYZ(x1, y1, zStart));
+                XYZ b4 = transform.OfPoint(new XYZ(x1, y1 + overlapY, zStart));
+
+                var curvesBot = new List<Curve> { Line.CreateBound(b1, b2), Line.CreateBound(b2, b3), Line.CreateBound(b3, b4) };
+
+                XYZ normZ = transform.BasisZ;
+
+                var tieTop = CreateRebarSet(pileCap, tieBarType, curvesTop, normZ, 0, arrayHeight, RebarStyle.Standard, config.SideTieQuantity);
+                if (tieTop != null) { ApplyRebarVisibility(tieTop, config.ViewUnobscured, config.ViewAsSolid3D); rebarCount++; }
+
+                var tieBot = CreateRebarSet(pileCap, tieBarType, curvesBot, normZ, 0, arrayHeight, RebarStyle.Standard, config.SideTieQuantity);
+                if (tieBot != null) { ApplyRebarVisibility(tieBot, config.ViewUnobscured, config.ViewAsSolid3D); rebarCount++; }
+            }
+        }
+
+        private Rebar? CreateRebarSet(
+            Element host,
+            RebarBarType barType,
+            IList<Curve> curves,
+            XYZ arrayNormal,
+            double spacingFeet,
+            double arrayLengthFeet,
+            RebarStyle style,
+            int fixedQuantity = 0,
+            RebarHookType startHook = null,
+            RebarHookType endHook = null,
+            RebarShape shape = null)
+        {
+            try
+            {
+                Rebar rebar = null;
+                #pragma warning disable CS0618
+                if (shape != null)
+                {
+                    rebar = Rebar.CreateFromCurvesAndShape(
+                        _doc,
+                        shape,
+                        barType,
+                        startHook,
+                        endHook,
+                        host,
+                        arrayNormal,
+                        curves,
+                        RebarHookOrientation.Right,
+                        RebarHookOrientation.Right);
+                }
+                else
+                {
+                    rebar = Rebar.CreateFromCurves(
+                        _doc,
+                        style,
+                        barType,
+                        startHook,
+                        endHook,
+                        host,
+                        arrayNormal,
+                        curves,
+                        RebarHookOrientation.Right,
+                        RebarHookOrientation.Right,
+                        true, true);
+                }
+                #pragma warning restore CS0618
+
+                if (rebar != null)
+                {
+                    RebarShapeDrivenAccessor accessor = rebar.GetShapeDrivenAccessor();
+                    if (accessor != null)
+                    {
+                        if (fixedQuantity == 1 && arrayLengthFeet <= 0.001)
+                        {
+                            accessor.SetLayoutAsSingle();
+                        }
+                        else if (fixedQuantity > 0)
+                        {
+                            double safeLen = arrayLengthFeet > 0.001 ? arrayLengthFeet : 1.0;
+                            accessor.SetLayoutAsFixedNumber(fixedQuantity + 2, safeLen, true, false, false);
+                        }
+                        else if (spacingFeet > 0 && arrayLengthFeet > 0.001)
+                        {
+                            accessor.SetLayoutAsMaximumSpacing(spacingFeet, arrayLengthFeet, true, true, true);
+                        }
+                    }
+                }
+
+                return rebar;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void TryApplyRebarHook(Rebar rebar, long hookTypeId)
+        {
+            try
+            {
+                var hookId = new ElementId(hookTypeId);
+                rebar.SetHookTypeId(0, hookId);
+                rebar.SetHookTypeId(1, hookId);
+            }
+            catch
+            {
+                // Ignore if shape does not permit annotation hooks
+            }
+        }
+
+        private void ApplyRebarVisibility(Rebar rebar, bool viewUnobscured, bool viewAsSolid3D)
+        {
+            if (rebar == null) return;
+
+            try
+            {
+                if (viewUnobscured && _doc.ActiveView != null)
+                {
+                    rebar.SetUnobscuredInView(_doc.ActiveView, true);
+                }
+
+                if (viewAsSolid3D)
+                {
+                    var views3D = new FilteredElementCollector(_doc)
+                        .OfClass(typeof(View3D))
+                        .Cast<View3D>()
+                        .Where(v => !v.IsTemplate);
+
+                    foreach (var v in views3D)
+                    {
+                        try
+                        {
+                            rebar.SetUnobscuredInView(v, true);
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private double GetCoverDistance(Element element, BuiltInParameter paramId, double defaultCoverFeet)
+        {
+            Parameter param = element.get_Parameter(paramId);
+            if (param != null && param.HasValue)
+            {
+                ElementId coverTypeId = param.AsElementId();
+                if (coverTypeId != ElementId.InvalidElementId)
+                {
+                    RebarCoverType? coverType = element.Document.GetElement(coverTypeId) as RebarCoverType;
+                    if (coverType != null)
+                    {
+                        return coverType.CoverDistance;
+                    }
+                }
+            }
+            return defaultCoverFeet;
+        }
+
+        public int GenerateRebarForWall(Element wall, AutoPileCap.Models.WallRebarConfig config)
+        {
+            if (!GetWallLocalBounds(wall, out Transform transform,
+                out double minX, out double maxX,
+                out double minY, out double maxY,
+                out double minZ, out double maxZ))
+            {
+                return 0;
+            }
+
+            int rebarCount = 0;
+
+            RebarBarType topBarType = _doc.GetElement(new ElementId(config.TopBarTypeXId)) as RebarBarType;
+            RebarBarType botBarType = _doc.GetElement(new ElementId(config.BottomBarTypeXId)) as RebarBarType;
+            RebarBarType tieBarType = _doc.GetElement(new ElementId(config.SideTieBarTypeId)) as RebarBarType;
+
+            double cBot = GetCoverDistance(wall, BuiltInParameter.CLEAR_COVER_BOTTOM, config.CoverBottomFeet);
+            double cTop = GetCoverDistance(wall, BuiltInParameter.CLEAR_COVER_TOP, config.CoverTopFeet);
+            double cSide = GetCoverDistance(wall, BuiltInParameter.CLEAR_COVER_OTHER, config.CoverSideFeet);
+
+            Solid mainSolid = GetMainSolid(wall);
+            if (mainSolid == null) return 0;
+
+            // Vertical Rebar (Top Config)
+            if (config.EnableTopRebar && topBarType != null)
+            {
+                double hookLen = config.TopHookXFeet;
+                double dVert = topBarType.BarNominalDiameter;
+                
+                // Front Face C-Bars
+                var rebarsF = CreateRebarArray(wall, mainSolid, transform, topBarType,
+                    XYZ.BasisX, XYZ.BasisZ, XYZ.BasisY,
+                    minX + cSide + dVert / 2.0, maxX - cSide - dVert / 2.0, config.TopSpacingXFeet,
+                    minZ + cBot + dVert / 2.0, maxZ - cTop - dVert / 2.0, XYZ.BasisY, minY + cSide + dVert / 2.0,
+                    config.TopHookMode, hookLen, config.TopHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+                rebarCount += rebarsF.Count;
+
+                // Back Face C-Bars
+                var rebarsB = CreateRebarArray(wall, mainSolid, transform, topBarType,
+                    XYZ.BasisX, XYZ.BasisZ, -XYZ.BasisY,
+                    minX + cSide + dVert / 2.0, maxX - cSide - dVert / 2.0, config.TopSpacingXFeet,
+                    minZ + cBot + dVert / 2.0, maxZ - cTop - dVert / 2.0, XYZ.BasisY, maxY - cSide - dVert / 2.0,
+                    config.TopHookMode, hookLen, config.TopHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+                rebarCount += rebarsB.Count;
+            }
+
+            // Horizontal Rebar (Bottom Config)
+            if (config.EnableBottomRebar && botBarType != null)
+            {
+                double hookLen = config.BottomHookXFeet;
+                double dHoriz = botBarType.BarNominalDiameter;
+                double dVert = topBarType != null && config.EnableTopRebar ? topBarType.BarNominalDiameter : 0;
+                
+                // Front Face
+                var rebarsF = CreateRebarArray(wall, mainSolid, transform, botBarType,
+                    XYZ.BasisZ, XYZ.BasisX, XYZ.BasisY,
+                    minZ + cBot + dVert + dHoriz / 2.0, maxZ - cTop - dVert - dHoriz / 2.0, config.BottomSpacingXFeet,
+                    minX + cSide + dHoriz / 2.0, maxX - cSide - dHoriz / 2.0, XYZ.BasisY, minY + cSide + dVert + dHoriz / 2.0,
+                    config.BottomHookMode, hookLen, config.BottomHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+                rebarCount += rebarsF.Count;
+
+                // Back Face
+                var rebarsB = CreateRebarArray(wall, mainSolid, transform, botBarType,
+                    XYZ.BasisZ, XYZ.BasisX, -XYZ.BasisY,
+                    minZ + cBot + dVert + dHoriz / 2.0, maxZ - cTop - dVert - dHoriz / 2.0, config.BottomSpacingXFeet,
+                    minX + cSide + dHoriz / 2.0, maxX - cSide - dHoriz / 2.0, XYZ.BasisY, maxY - cSide - dVert - dHoriz / 2.0,
+                    config.BottomHookMode, hookLen, config.BottomHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+                rebarCount += rebarsB.Count;
+            }
+
+            // Side Ties (Pin Ties)
+            if (config.EnableSideTies && tieBarType != null)
+            {
+                double dTie = tieBarType.BarNominalDiameter;
+                RebarShape tieShape = _doc.GetElement(new ElementId(config.SideTieShapeId)) as RebarShape;
+
+                // Find proper Stirrup/Tie hooks for cross ties (usually 135 and 90)
+                RebarHookType hook135 = new FilteredElementCollector(_doc).OfClass(typeof(RebarHookType))
+                    .Cast<RebarHookType>().FirstOrDefault(h => h.Name.Contains("135") && (h.Name.Contains("Stirrup") || h.Name.Contains("Tie") || h.Name.Contains("Seismic")));
+                if (hook135 == null) hook135 = new FilteredElementCollector(_doc).OfClass(typeof(RebarHookType)).Cast<RebarHookType>().FirstOrDefault(h => h.Name.Contains("135"));
+
+                RebarHookType hook90 = new FilteredElementCollector(_doc).OfClass(typeof(RebarHookType))
+                    .Cast<RebarHookType>().FirstOrDefault(h => h.Name.Contains("90") && (h.Name.Contains("Stirrup") || h.Name.Contains("Tie") || h.Name.Contains("Seismic")));
+                if (hook90 == null) hook90 = new FilteredElementCollector(_doc).OfClass(typeof(RebarHookType)).Cast<RebarHookType>().FirstOrDefault(h => h.Name.Contains("90"));
+
+                int countX = (int)Math.Max(2, (maxX - minX - 2 * cSide) / config.TopSpacingXFeet);
+                double stepX = (maxX - minX - 2 * cSide) / countX;
+                
+                double tieSpacingFeet = AutoPileCap.Models.WallRebarConfig.MmToFeet(config.SideTieSpacingMm);
+                int numZ = (int)Math.Max(1, (maxZ - minZ - cTop - cBot) / tieSpacingFeet);
+                double stepZ = (maxZ - minZ - cTop - cBot) / (numZ + 1);
+                
+                double startZ = minZ + cBot + stepZ;
+                double endZ = minZ + cBot + numZ * stepZ;
+                double arrayLenZ = Math.Max(0, endZ - startZ);
+
+                for (int j = 1; j < countX; j++)
+                {
+                    double x = minX + cSide + j * stepX;
+                    
+                    XYZ p1 = transform.OfPoint(new XYZ(x, minY + cSide + dTie / 2.0, startZ));
+                    XYZ p2 = transform.OfPoint(new XYZ(x, maxY - cSide - dTie / 2.0, startZ));
+                    var curves = new List<Curve> { Line.CreateBound(p1, p2) };
+                    
+                    Rebar tie;
+                    if (arrayLenZ > 0.001)
+                    {
+                        tie = CreateRebarSet(wall, tieBarType, curves, transform.BasisZ, tieSpacingFeet, arrayLenZ, RebarStyle.StirrupTie, 0, hook135, hook90, tieShape);
+                    }
+                    else
+                    {
+                        tie = CreateRebarSet(wall, tieBarType, curves, transform.BasisZ, 0, 0, RebarStyle.StirrupTie, 1, hook135, hook90, tieShape);
+                    }
+
+                    if (tie != null)
+                    {
+                        ApplyRebarVisibility(tie, config.ViewUnobscured, config.ViewAsSolid3D);
+                        rebarCount++;
+                    }
+                }
+            }
+
+            return rebarCount;
+        }
+
+        public bool GetWallLocalBounds(Element wall, out Transform transform, out double minX, out double maxX, out double minY, out double maxY, out double minZ, out double maxZ)
+        {
+            transform = Transform.Identity;
+            minX = double.MaxValue; maxX = double.MinValue;
+            minY = double.MaxValue; maxY = double.MinValue;
+            minZ = double.MaxValue; maxZ = double.MinValue;
+
+            if (wall.Location is LocationCurve locCurve)
+            {
+                Curve curve = locCurve.Curve;
+                XYZ origin = curve.GetEndPoint(0);
+                XYZ direction = (curve.GetEndPoint(1) - curve.GetEndPoint(0)).Normalize();
+                XYZ up = XYZ.BasisZ;
+                XYZ cross = up.CrossProduct(direction).Normalize();
+                
+                transform.Origin = origin;
+                transform.BasisX = direction;
+                transform.BasisY = cross;
+                transform.BasisZ = up;
+            }
+
+            Transform inv = transform.Inverse;
+            bool foundVertices = false;
+
+            var opt = new Options { ComputeReferences = true, DetailLevel = ViewDetailLevel.Fine };
+            GeometryElement geomElem = wall.get_Geometry(opt);
+
+            if (geomElem != null)
+            {
+                foreach (GeometryObject obj in geomElem)
+                {
+                    if (obj is Solid solid && solid.Faces.Size > 0)
+                    {
+                        foreach (Edge edge in solid.Edges)
+                        {
+                            foreach (XYZ pt in edge.Tessellate())
+                            {
+                                XYZ localPt = inv.OfPoint(pt);
+                                if (localPt.X < minX) minX = localPt.X;
+                                if (localPt.X > maxX) maxX = localPt.X;
+                                if (localPt.Y < minY) minY = localPt.Y;
+                                if (localPt.Y > maxY) maxY = localPt.Y;
+                                if (localPt.Z < minZ) minZ = localPt.Z;
+                                if (localPt.Z > maxZ) maxZ = localPt.Z;
+                                foundVertices = true;
+                            }
+                        }
+                    }
+                    else if (obj is GeometryInstance geomInst)
+                    {
+                        GeometryElement instGeom = geomInst.GetInstanceGeometry();
+                        if (instGeom != null)
+                        {
+                            foreach (GeometryObject instObj in instGeom)
+                            {
+                                if (instObj is Solid instSolid && instSolid.Faces.Size > 0)
+                                {
+                                    foreach (Edge edge in instSolid.Edges)
+                                    {
+                                        foreach (XYZ pt in edge.Tessellate())
+                                        {
+                                            XYZ localPt = inv.OfPoint(pt);
+                                            if (localPt.X < minX) minX = localPt.X;
+                                            if (localPt.X > maxX) maxX = localPt.X;
+                                            if (localPt.Y < minY) minY = localPt.Y;
+                                            if (localPt.Y > maxY) maxY = localPt.Y;
+                                            if (localPt.Z < minZ) minZ = localPt.Z;
+                                            if (localPt.Z > maxZ) maxZ = localPt.Z;
+                                            foundVertices = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!foundVertices)
+            {
+                BoundingBoxXYZ bbox = wall.get_BoundingBox(null);
+                if (bbox != null)
+                {
+                    XYZ center = 0.5 * (bbox.Min + bbox.Max);
+                    double halfL = 0.5 * (bbox.Max.X - bbox.Min.X);
+                    double halfW = 0.5 * (bbox.Max.Y - bbox.Min.Y);
+                    double halfH = 0.5 * (bbox.Max.Z - bbox.Min.Z);
+                    minX = -halfL; maxX = halfL;
+                    minY = -halfW; maxY = halfW;
+                    minZ = -halfH; maxZ = halfH;
+                    transform.Origin = center;
+                    return (maxX > minX) && (maxY > minY) && (maxZ > minZ);
+                }
+                return false;
+            }
+
+            return (maxX > minX) && (maxY > minY) && (maxZ > minZ);
+        }
+
+        public int GenerateRebarForSlab(Element pileCap, SlabRebarConfig config)
+        {
+            if (!GetPileCapLocalBounds(pileCap, out Transform transform,
+                out double minX, out double maxX,
+                out double minY, out double maxY,
+                out double minZ, out double maxZ))
+            {
+                return 0;
+            }
+
+            int rebarCount = 0;
+
+            RebarBarType? botBarTypeX = _doc.GetElement(new ElementId(config.BottomBarTypeXId)) as RebarBarType;
+            RebarBarType? botBarTypeY = _doc.GetElement(new ElementId(config.BottomBarTypeYId)) as RebarBarType ?? botBarTypeX;
+            RebarBarType? topBarTypeX = _doc.GetElement(new ElementId(config.TopBarTypeXId)) as RebarBarType ?? botBarTypeX;
+            RebarBarType? topBarTypeY = _doc.GetElement(new ElementId(config.TopBarTypeYId)) as RebarBarType ?? topBarTypeX;
+            RebarBarType? tieBarType  = _doc.GetElement(new ElementId(config.SideTieBarTypeId)) as RebarBarType ?? botBarTypeX;
+
+            double cBot = GetCoverDistance(pileCap, BuiltInParameter.CLEAR_COVER_BOTTOM, config.CoverBottomFeet);
+            double cTop = GetCoverDistance(pileCap, BuiltInParameter.CLEAR_COVER_TOP, config.CoverTopFeet);
+            double cSide = GetCoverDistance(pileCap, BuiltInParameter.CLEAR_COVER_OTHER, config.CoverSideFeet);
+
+            double dBotX = botBarTypeX?.BarNominalDiameter ?? GeometryHelper.MmToFeet(16);
+            double dBotY = botBarTypeY?.BarNominalDiameter ?? GeometryHelper.MmToFeet(16);
+            double dTopX = topBarTypeX?.BarNominalDiameter ?? GeometryHelper.MmToFeet(16);
+            double dTopY = topBarTypeY?.BarNominalDiameter ?? GeometryHelper.MmToFeet(16);
+            double dTie  = tieBarType?.BarNominalDiameter  ?? GeometryHelper.MmToFeet(12);
+
+            double availableHeight = (maxZ - minZ) - cBot - cTop;
+            
+            // Calculate full height to perfectly align top and bottom hooks (forming closed U-bars)
+            double fullHookBotX = availableHeight - dTopX * 0.5 - dBotX * 0.5;
+            double fullHookBotY = availableHeight - dTopY * 0.5 - dBotY * 0.5;
+            double fullHookTopX = availableHeight - dTopX * 0.5 - dBotX * 0.5;
+            double fullHookTopY = availableHeight - dTopY * 0.5 - dBotY * 0.5;
+            
+            // Prioritize full alignment as requested, but allow user override if they set a very specific large/small value
+            // (If they left it at default 450mm, it will auto-expand to full height)
+            double hookLenBotX = config.BottomHookXFeet < fullHookBotX ? fullHookBotX : Math.Min(config.BottomHookXFeet, availableHeight);
+            double hookLenBotY = config.BottomHookYFeet < fullHookBotY ? fullHookBotY : Math.Min(config.BottomHookYFeet, availableHeight);
+            double hookLenTopX = config.TopHookXFeet < fullHookTopX ? fullHookTopX : Math.Min(config.TopHookXFeet, availableHeight);
+            double hookLenTopY = config.TopHookYFeet < fullHookTopY ? fullHookTopY : Math.Min(config.TopHookYFeet, availableHeight);
+
+            Solid mainSolid = GetMainSolid(pileCap);
+            if (mainSolid == null) return 0;
+            
+            CurveLoop innerLoop = null;
+            Solid innerSolid = CreateInnerSolid(mainSolid, cSide, transform, out innerLoop);
+            
+            bool isRectangular = false;
+            if (innerLoop != null && innerLoop.Count() == 4)
+            {
+                isRectangular = true;
+                var curves = innerLoop.ToList();
+                for (int i = 0; i < 4; i++)
+                {
+                    Curve c1 = curves[i];
+                    Curve c2 = curves[(i + 1) % 4];
+                    XYZ d1 = (c1.GetEndPoint(1) - c1.GetEndPoint(0)).Normalize();
+                    XYZ d2 = (c2.GetEndPoint(1) - c2.GetEndPoint(0)).Normalize();
+                    if (Math.Abs(d1.DotProduct(d2)) > 0.01)
+                    {
+                        isRectangular = false;
+                        break;
+                    }
+                }
+            }
+
+            // If innerSolid fails, fall back to mainSolid (but no perpendicular cover guarantees at angles)
+            Solid intersectSolid = innerSolid ?? mainSolid;
+
+            // 1. Bottom Reinforcement - Direction 1 (Local X)
+            if (config.EnableBottomRebar && botBarTypeX != null)
+            {
+                double z = minZ + cBot + dBotX * 0.5;
+                var rebars = CreateRebarArray(pileCap, intersectSolid, transform, botBarTypeX,
+                    XYZ.BasisY, XYZ.BasisX, XYZ.BasisZ,
+                    minY + cSide + dBotX * 0.5, maxY - cSide - dBotX * 0.5, config.BottomSpacingXFeet,
+                    minX, maxX, XYZ.BasisZ, z,
+                    config.BottomHookMode, hookLenBotX, config.BottomHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+                
+                rebarCount += rebars.Count;
+            }
+
+            // 2. Bottom Reinforcement - Direction 2 (Local Y)
+            if (config.EnableBottomRebar && botBarTypeY != null)
+            {
+                double z = minZ + cBot + dBotX + dBotY * 0.5;
+                var rebars = CreateRebarArray(pileCap, intersectSolid, transform, botBarTypeY,
+                    XYZ.BasisX, XYZ.BasisY, XYZ.BasisZ,
+                    minX + cSide + dBotY * 0.5, maxX - cSide - dBotY * 0.5, config.BottomSpacingYFeet,
+                    minY, maxY, XYZ.BasisZ, z,
+                    config.BottomHookMode, hookLenBotY, config.BottomHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+
+                rebarCount += rebars.Count;
+            }
+
+            // 3. Top Reinforcement - Direction 1 (Local X)
+            if (config.EnableTopRebar && topBarTypeX != null)
+            {
+                double z = maxZ - cTop - dTopX * 0.5;
+                var rebars = CreateRebarArray(pileCap, intersectSolid, transform, topBarTypeX,
+                    XYZ.BasisY, XYZ.BasisX, -XYZ.BasisZ,
+                    minY + cSide + dTopX * 0.5, maxY - cSide - dTopX * 0.5, config.TopSpacingXFeet,
+                    minX, maxX, XYZ.BasisZ, z,
+                    config.TopHookMode, hookLenTopX, config.TopHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+
+                rebarCount += rebars.Count;
+            }
+
+            // 4. Top Reinforcement - Direction 2 (Local Y)
+            if (config.EnableTopRebar && topBarTypeY != null)
+            {
+
+                double z = maxZ - cTop - dTopX - dTopY * 0.5;
+                var rebars = CreateRebarArray(pileCap, intersectSolid, transform, topBarTypeY,
+                    XYZ.BasisX, XYZ.BasisY, -XYZ.BasisZ,
+                    minX + cSide + dTopY * 0.5, maxX - cSide - dTopY * 0.5, config.TopSpacingYFeet,
+                    minY, maxY, XYZ.BasisZ, z,
+                    config.TopHookMode, hookLenTopY, config.TopHookTypeId, config.ViewUnobscured, config.ViewAsSolid3D);
+
+                rebarCount += rebars.Count;
+            }
+
+            // 5. Side / Perimeter Ties (Stirrups) - Exact Polygon Offset (Overlapping U-bars)
+            if (config.EnableSideTies && tieBarType != null)
+            {
+                double zStart = minZ + cBot;
+                double arrayHeight = (maxZ - minZ) - cBot - cTop;
+
+                if (arrayHeight > 0)
+                {
+                    if (innerLoop != null)
+                    {
+                        try
+                        {
+                            XYZ normZ = transform.BasisZ;
+                            double minLength = tieBarType.BarNominalDiameter * 5;
+
+                            // Extract vertices from innerLoop, projecting to zStart
+                            List<XYZ> vertices = new List<XYZ>();
+                            foreach (Curve c in innerLoop)
+                            {
+                                XYZ p = c.GetEndPoint(0);
+                                XYZ locP = transform.Inverse.OfPoint(p);
+                                locP = new XYZ(locP.X, locP.Y, zStart);
+                                XYZ globalP = transform.OfPoint(locP);
+                                
+                                // Clean up tiny segments from the offset polygon
+                                if (vertices.Count == 0 || vertices.Last().DistanceTo(globalP) > minLength)
+                                {
+                                    vertices.Add(globalP);
+                                }
+                            }
+                            
+                            if (vertices.Count > 0 && vertices.First().DistanceTo(vertices.Last()) < minLength)
+                            {
+                                vertices.RemoveAt(vertices.Count - 1); // Merge last to first if too close
+                            }
+
+                            if (vertices.Count >= 3)
+                            {
+                                double totalPerimeter = 0;
+                                for (int i = 0; i < vertices.Count; i++)
+                                    totalPerimeter += vertices[i].DistanceTo(vertices[(i + 1) % vertices.Count]);
+
+                                double overlap = config.SideTieLapLengthFeet;
+                                if (overlap <= 0) overlap = 1.5; // default overlap ~450mm
+                                
+                                // Chain 1: -overlap to L/2 + overlap
+                                List<Curve> curves1 = TracePolygon(vertices, -overlap, (totalPerimeter / 2) + overlap, minLength);
+                                
+                                // Chain 2: L/2 - overlap to L + overlap
+                                List<Curve> curves2 = TracePolygon(vertices, (totalPerimeter / 2) - overlap, totalPerimeter + overlap, minLength);
+                                
+                                bool success = false;
+                                if (curves1.Count > 0)
+                                {
+                                    var tie1 = CreateRebarSet(pileCap, tieBarType, curves1, normZ, 0, arrayHeight, RebarStyle.Standard, config.SideTieQuantity);
+                                    if (tie1 != null) { ApplyRebarVisibility(tie1, config.ViewUnobscured, config.ViewAsSolid3D); rebarCount++; success = true; }
+                                }
+                                
+                                if (curves2.Count > 0)
+                                {
+                                    var tie2 = CreateRebarSet(pileCap, tieBarType, curves2, normZ, 0, arrayHeight, RebarStyle.Standard, config.SideTieQuantity);
+                                    if (tie2 != null) { ApplyRebarVisibility(tie2, config.ViewUnobscured, config.ViewAsSolid3D); rebarCount++; success = true; }
+                                }
+                                
+                                if (!success) throw new Exception("Failed to create freeform ties.");
+                            }
+                            else
+                            {
+                                FallbackGenerateSideTies(pileCap, transform, minX, maxX, minY, maxY, minZ, maxZ, cBot, cTop, cSide, dTie, arrayHeight, zStart, tieBarType, config, ref rebarCount);
+                            }
+                        }
+                        catch
+                        {
+                            FallbackGenerateSideTies(pileCap, transform, minX, maxX, minY, maxY, minZ, maxZ, cBot, cTop, cSide, dTie, arrayHeight, zStart, tieBarType, config, ref rebarCount);
+                        }
+                    }
+                    else
+                    {
+                        FallbackGenerateSideTies(pileCap, transform, minX, maxX, minY, maxY, minZ, maxZ, cBot, cTop, cSide, dTie, arrayHeight, zStart, tieBarType, config, ref rebarCount);
+                    }
+                }
+            }
+
+            return rebarCount;
+        }
+
+        private void FallbackGenerateSideTies(
+            Element pileCap, Transform transform,
+            double minX, double maxX, double minY, double maxY, double minZ, double maxZ,
+            double cBot, double cTop, double cSide, double dTie,
+            double arrayHeight, double zStart, RebarBarType tieBarType,
+            SlabRebarConfig config, ref int rebarCount)
+        {
+            double x1 = minX + cSide - (dTie * 0.5);
+            double x2 = maxX - cSide + (dTie * 0.5);
+            double y1 = minY + cSide - (dTie * 0.5);
+            double y2 = maxY - cSide + (dTie * 0.5);
+
+            if (x2 > x1 && y2 > y1 && arrayHeight > 0)
+            {
+                double overlapY = (y2 - y1) / 2 + config.SideTieLapLengthFeet / 2;
+                overlapY = Math.Min(overlapY, y2 - y1); 
+
+                XYZ t1 = transform.OfPoint(new XYZ(x1, y2 - overlapY, zStart));
+                XYZ t2 = transform.OfPoint(new XYZ(x1, y2, zStart));
+                XYZ t3 = transform.OfPoint(new XYZ(x2, y2, zStart));
+                XYZ t4 = transform.OfPoint(new XYZ(x2, y2 - overlapY, zStart));
+
+                var curvesTop = new List<Curve> { Line.CreateBound(t1, t2), Line.CreateBound(t2, t3), Line.CreateBound(t3, t4) };
+
+                XYZ b1 = transform.OfPoint(new XYZ(x2, y1 + overlapY, zStart));
+                XYZ b2 = transform.OfPoint(new XYZ(x2, y1, zStart));
+                XYZ b3 = transform.OfPoint(new XYZ(x1, y1, zStart));
+                XYZ b4 = transform.OfPoint(new XYZ(x1, y1 + overlapY, zStart));
+
+                var curvesBot = new List<Curve> { Line.CreateBound(b1, b2), Line.CreateBound(b2, b3), Line.CreateBound(b3, b4) };
+
+                XYZ normZ = transform.BasisZ;
+
+                var tieTop = CreateRebarSet(pileCap, tieBarType, curvesTop, normZ, 0, arrayHeight, RebarStyle.Standard, config.SideTieQuantity);
+                if (tieTop != null) { ApplyRebarVisibility(tieTop, config.ViewUnobscured, config.ViewAsSolid3D); rebarCount++; }
+
+                var tieBot = CreateRebarSet(pileCap, tieBarType, curvesBot, normZ, 0, arrayHeight, RebarStyle.Standard, config.SideTieQuantity);
+                if (tieBot != null) { ApplyRebarVisibility(tieBot, config.ViewUnobscured, config.ViewAsSolid3D); rebarCount++; }
+            }
+        }
+
+    }
+
+    /// <summary>
+    /// Failure preprocessor to automatically resolve or suppress warnings/errors during rebar creation.
+    /// </summary>
+    public class RebarFailurePreprocessor : IFailuresPreprocessor
+    {
+        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor)
+        {
+            var failureMessages = failuresAccessor.GetFailureMessages();
+            foreach (var failure in failureMessages)
+            {
+                if (failure.GetSeverity() == FailureSeverity.Warning)
+                {
+                    failuresAccessor.DeleteWarning(failure);
+                }
+                else if (failure.GetSeverity() == FailureSeverity.Error)
+                {
+                    if (failure.HasResolutions())
+                    {
+                        failuresAccessor.ResolveFailure(failure);
+                    }
+                    else
+                    {
+                        var ids = failure.GetFailingElementIds();
+                        if (ids != null && ids.Count > 0)
+                        {
+                            failuresAccessor.DeleteElements(ids.ToList());
+                        }
+                    }
+                }
+            }
+            return FailureProcessingResult.Continue;
+        }
+    }
+}

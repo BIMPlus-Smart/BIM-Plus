@@ -1,0 +1,200 @@
+<Window x:Class="AutoPileCap.UI.CapExistingPilesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cap Over Existing Piles - Revit 2026"
+        Height="540" Width="600"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#F8FAFC"
+        Foreground="#0F172A"
+        FontFamily="Segoe UI, Inter, Arial"
+        FontSize="13">
+
+    <Window.Resources>
+        <!-- Modern Light Theme Styles -->
+        <SolidColorBrush x:Key="PrimaryAccent" Color="#0D6EFD"/>
+        <SolidColorBrush x:Key="PrimaryAccentHover" Color="#0B5ED7"/>
+        <SolidColorBrush x:Key="CardBackground" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="CardBorder" Color="#E2E8F0"/>
+        <SolidColorBrush x:Key="TextMuted" Color="#64748B"/>
+        <SolidColorBrush x:Key="InputBackground" Color="#F1F5F9"/>
+
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,16"/>
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="{StaticResource CardBackground}"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupBox">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="8">
+                            <StackPanel Margin="16">
+                                <ContentPresenter ContentSource="Header" Margin="0,0,0,12"/>
+                                <ContentPresenter />
+                            </StackPanel>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource InputBackground}"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="{StaticResource InputBackground}"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="Label">
+            <Setter Property="Foreground" Value="#475569"/>
+            <Setter Property="Padding" Value="0,4"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="RadioButton">
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <!-- Body -->
+            <RowDefinition Height="Auto"/>
+            <!-- Footer -->
+        </Grid.RowDefinitions>
+
+        <!-- Body -->
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="0,0,14,0">
+            <StackPanel Orientation="Vertical">
+                <!-- Piles Selection -->
+                <GroupBox>
+                    <GroupBox.Header>
+                        <TextBlock Text="1. Target Piles Scope" Foreground="#0D6EFD" FontWeight="Bold"/>
+                    </GroupBox.Header>
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <RadioButton x:Name="RbSelectedPiles" Content="Selected Piles in Model" IsChecked="True" Grid.Column="0"/>
+                        <RadioButton x:Name="RbAllPiles" Content="All Piles in Active View" Grid.Column="1"/>
+                    </Grid>
+                </GroupBox>
+
+                <!-- Clustering & Dimension Parameters -->
+                <GroupBox>
+                    <GroupBox.Header>
+                        <TextBlock Text="2. Clustering &amp; Sizing Parameters" Foreground="#0D6EFD" FontWeight="Bold"/>
+                    </GroupBox.Header>
+                    <Grid Margin="0,4,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="60"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Cluster Max Distance -->
+                        <Label Grid.Row="0" Grid.Column="0" Content="Max Pile Proximity / Spacing:"/>
+                        <TextBox x:Name="TxtClusterDistance" Grid.Row="0" Grid.Column="1" Margin="0,4" Text="2500"/>
+                        <Label Grid.Row="0" Grid.Column="2" Content="mm" Foreground="{StaticResource TextMuted}"/>
+
+                        <!-- Overhang -->
+                        <Label Grid.Row="1" Grid.Column="0" Content="Cap Overhang / Edge Distance:"/>
+                        <TextBox x:Name="TxtEdgeDistance" Grid.Row="1" Grid.Column="1" Margin="0,4" Text="300"/>
+                        <Label Grid.Row="1" Grid.Column="2" Content="mm" Foreground="{StaticResource TextMuted}"/>
+
+                        <!-- Cap Thickness -->
+                        <Label Grid.Row="2" Grid.Column="0" Content="Cap Thickness / Depth:"/>
+                        <TextBox x:Name="TxtCapThickness" Grid.Row="2" Grid.Column="1" Margin="0,4" Text="900"/>
+                        <Label Grid.Row="2" Grid.Column="2" Content="mm" Foreground="{StaticResource TextMuted}"/>
+                    </Grid>
+                </GroupBox>
+
+                <!-- Family Type -->
+                <GroupBox>
+                    <GroupBox.Header>
+                        <TextBlock Text="3. Pile Cap Family Symbol" Foreground="#0D6EFD" FontWeight="Bold"/>
+                    </GroupBox.Header>
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Label Grid.Column="0" Content="Pile Cap Type:"/>
+                        <ComboBox x:Name="CmbCapSymbol" Grid.Column="1" Margin="0,4"/>
+                    </Grid>
+                </GroupBox>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="1" Orientation="Vertical" Margin="0,16,14,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="BtnClusterAndCap" Grid.Column="0" Content="✨ AUTO-CAP PILES" 
+                        Height="44" Margin="0,0,12,0"
+                        Background="#0D6EFD" Foreground="White" FontWeight="Bold" Cursor="Hand"
+                        Click="BtnClusterAndCap_Click">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="6"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+
+                <Button x:Name="BtnClose" Grid.Column="1" Content="CLOSE" 
+                        Width="100" Height="44"
+                        Background="#FFFFFF" Foreground="#0F172A" FontWeight="SemiBold" Cursor="Hand"
+                        Click="BtnClose_Click">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="6"/>
+                            <Setter Property="BorderBrush" Value="#E2E8F0"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+            </Grid>
+            
+            <Grid Margin="0,12,0,0">
+                <TextBlock x:Name="TxtStatus" Text="Ready to cluster and cap piles" Foreground="#64748B" FontSize="11" VerticalAlignment="Center"/>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</Window>

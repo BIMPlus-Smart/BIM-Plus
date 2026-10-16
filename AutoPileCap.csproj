@@ -52,6 +52,7 @@
     <EmbeddedResource Include="Resources\beam_rebar.jpg" />
     <EmbeddedResource Include="Resources\slab_rebar.jpg" />
     <EmbeddedResource Include="Resources\partition_rebar.jpg" />
+    <EmbeddedResource Include="Resources\stair_rebar.jpg" />
   </ItemGroup>
   
   <ItemGroup>

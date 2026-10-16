@@ -99,6 +99,20 @@ namespace AutoPileCap
             };
             beamPanel.AddItem(btnBeamRebarData);
 
+            // Stairs Panel
+            RibbonPanel stairPanel = GetOrCreateRibbonPanel(application, tabName, "Stairs");
+            var btnStairRebarData = new PushButtonData(
+                "btnStairRebar",
+                "Stair\nRebar",
+                assemblyPath,
+                "AutoPileCap.Commands.StairRebarCommand")
+            {
+                ToolTip = "Design and generate 3D reinforcement cages (waist bottom bars, scissor joint top bars, and transverse distribution bars) for stairs.",
+                LargeImage = LoadEmbeddedImage("stair_rebar.jpg", 96) ?? CreateIcon(32, System.Windows.Media.Color.FromRgb(249, 115, 22), "🪜"),
+                Image = LoadEmbeddedImage("stair_rebar.jpg", 48) ?? CreateIcon(16, System.Windows.Media.Color.FromRgb(249, 115, 22), "🪜")
+            };
+            stairPanel.AddItem(btnStairRebarData);
+
             // Partitions Panel
             RibbonPanel partitionPanel = GetOrCreateRibbonPanel(application, tabName, "Partitions");
             var btnPartitionRebarData = new PushButtonData(

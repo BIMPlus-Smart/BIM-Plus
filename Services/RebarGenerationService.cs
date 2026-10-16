@@ -1284,7 +1284,12 @@ namespace AutoPileCap.Services
             }
         }
 
+        public int GenerateRebarForStair(Element stair, StairRebarConfig config)
+        {
+            return StairRebarGenerationService.Generate(_doc, stair, config);
+        }
     }
+
 
     /// <summary>
     /// Failure preprocessor to automatically resolve or suppress warnings/errors during rebar creation.

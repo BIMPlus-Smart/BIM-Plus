@@ -277,5 +277,35 @@ namespace AutoPileCap.Services
         {
             return new Autodesk.Revit.DB.FilteredElementCollector(_doc).OfCategory(Autodesk.Revit.DB.BuiltInCategory.OST_Floors).WhereElementIsNotElementType().ToElements();
         }
+
+        public System.Collections.Generic.IEnumerable<Autodesk.Revit.DB.Element> GetStairs(System.Collections.Generic.ICollection<Autodesk.Revit.DB.ElementId>? selectedIds = null)
+        {
+            var doc = _doc;
+            if (selectedIds != null && selectedIds.Count > 0)
+            {
+                var selectedStairs = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(
+                    System.Linq.Enumerable.Select(selectedIds, id => doc.GetElement(id)),
+                    e => e != null && e.Category != null && (
+                        e.Category.Id.Value == (long)Autodesk.Revit.DB.BuiltInCategory.OST_Stairs ||
+                        e.Category.Id.Value == (long)Autodesk.Revit.DB.BuiltInCategory.OST_StairsRuns ||
+                        e.Category.Id.Value == (long)Autodesk.Revit.DB.BuiltInCategory.OST_StairsLandings)));
+                if (selectedStairs.Count > 0) return selectedStairs;
+            }
+            return GetStairs();
+        }
+
+        public System.Collections.Generic.IEnumerable<Autodesk.Revit.DB.Element> GetStairs()
+        {
+            var filter = new Autodesk.Revit.DB.ElementMulticategoryFilter(new System.Collections.Generic.List<Autodesk.Revit.DB.BuiltInCategory>
+            {
+                Autodesk.Revit.DB.BuiltInCategory.OST_Stairs,
+                Autodesk.Revit.DB.BuiltInCategory.OST_StairsRuns
+            });
+            return new Autodesk.Revit.DB.FilteredElementCollector(_doc)
+                .WherePasses(filter)
+                .WhereElementIsNotElementType()
+                .ToElements();
+        }
     }
 }
+

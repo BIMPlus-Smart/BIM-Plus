@@ -107,6 +107,25 @@ $ManifestPath = "$RevitAddinDir\AutoPileCap.addin"
 Set-Content -Path $ManifestPath -Value $ManifestContent -Encoding UTF8
 Write-Host "Installed manifest: $ManifestPath" -ForegroundColor Green
 
+# 4. Automatically push to GitHub for clients
+Write-Host "`n[4/4] Pushing update to GitHub for automatic client updates..." -ForegroundColor Yellow
+$gitCmd = "$env:LOCALAPPDATA\GitHubDesktop\app-3.6.7\resources\app\git\cmd\git.exe"
+if (-not (Test-Path $gitCmd)) {
+    $gitCmd = (Get-ChildItem "$env:LOCALAPPDATA\GitHubDesktop" -Filter "git.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+}
+
+if ($gitCmd -and (Test-Path $gitCmd)) {
+    try {
+        & $gitCmd add -f "bin/Release/net8.0-windows/AutoPileCap.dll" "update_info.json"
+        & $gitCmd add .
+        & $gitCmd commit -m "Auto update $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+        & $gitCmd push origin main
+        Write-Host "Pushed update to GitHub! Clients will auto-update when opening Revit." -ForegroundColor Green
+    } catch {
+        Write-Host "Note: Could not push to GitHub: $_" -ForegroundColor Yellow
+    }
+}
+
 Write-Host "`n==================================================" -ForegroundColor Cyan
 Write-Host "   DEPLOYMENT SUCCESSFUL!                         " -ForegroundColor Green
 Write-Host "   Start Revit 2026 and look for the tab:        " -ForegroundColor White

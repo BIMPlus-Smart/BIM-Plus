@@ -1,5 +1,5 @@
 {
   "version": "1.0.1",
-  "dllUrl": "https://raw.githubusercontent.com/BIMPlus-Smart/bim-plus/main/bin/Release/net8.0-windows/AutoPileCap.dll",
+  "dllUrl": "https://raw.githubusercontent.com/BIMPlus-Smart/BIM-Plus/main/bin/Release/net8.0-windows/AutoPileCap.dll",
   "notes": "Automated daily/weekly update for BIM Plus"
 }

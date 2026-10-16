@@ -15,7 +15,7 @@ namespace AutoPileCap.Services
     public static class AutoUpdateService
     {
         // Change this URL to your own online update manifest (GitHub, web server, or cloud storage)
-        public const string UpdateManifestUrl = "https://raw.githubusercontent.com/BIMPlus-Smart/bim-plus/main/update_info.json";
+        public const string UpdateManifestUrl = "https://raw.githubusercontent.com/BIMPlus-Smart/BIM-Plus/main/update_info.json";
 
         public class UpdateInfo
         {

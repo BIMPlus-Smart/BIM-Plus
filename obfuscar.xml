@@ -22,5 +22,7 @@
     <SkipType name="AutoPileCap.Handlers.*" skipMethods="true" skipProperties="true" skipFields="true" />
     <SkipNamespace name="AutoPileCap.Models" />
     <SkipType name="AutoPileCap.Models.*" skipMethods="true" skipProperties="true" skipFields="true" />
+    <SkipNamespace name="AutoPileCap.Services" />
+    <SkipType name="AutoPileCap.Services.*" skipMethods="true" skipProperties="true" skipFields="true" />
   </Module>
 </Obfuscator>

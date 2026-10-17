@@ -21,32 +21,37 @@ namespace IconConverter
 
             try
             {
-                // Load the image and convert to bitmap
+                int[] sizes = new int[] { 256, 128, 64, 48, 32, 24, 16 };
+                var bitmaps = new Bitmap[sizes.Length];
+
                 using (Image img = Image.FromFile(inputPath))
                 {
                     using (Bitmap originalBmp = new Bitmap(img))
                     {
                         Console.WriteLine($"Loaded image with size: {originalBmp.Width}x{originalBmp.Height}");
                         
-                        using (Bitmap resizedBmp = new Bitmap(256, 256))
+                        for (int i = 0; i < sizes.Length; i++)
                         {
+                            int s = sizes[i];
+                            var resizedBmp = new Bitmap(s, s, PixelFormat.Format32bppArgb);
                             using (Graphics g = Graphics.FromImage(resizedBmp))
                             {
                                 g.Clear(Color.Transparent);
-                                g.SmoothingMode = SmoothingMode.AntiAlias;
+                                g.SmoothingMode = SmoothingMode.HighQuality;
                                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                                 g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-
-                                // Draw the original image onto the 256x256 bitmap
-                                g.DrawImage(originalBmp, new Rectangle(0, 0, 256, 256));
+                                g.CompositingQuality = CompositingQuality.HighQuality;
+                                g.DrawImage(originalBmp, new Rectangle(0, 0, s, s));
                             }
-
-                            // Save as an icon
-                            SaveAsIcon(resizedBmp, outputPath);
-                            Console.WriteLine("Successfully created icon from JPEG.");
+                            bitmaps[i] = resizedBmp;
                         }
+
+                        SaveMultiIcon(bitmaps, sizes, outputPath);
+                        Console.WriteLine("Successfully created multi-resolution icon.");
                     }
                 }
+
+                foreach (var b in bitmaps) b.Dispose();
             }
             catch (Exception ex)
             {
@@ -54,47 +59,58 @@ namespace IconConverter
             }
         }
 
-        public static void SaveAsIcon(Bitmap bitmap, string filePath)
+        public static void SaveMultiIcon(Bitmap[] bitmaps, int[] sizes, string filePath)
         {
-            using (FileStream fs = new FileStream(filePath, FileMode.Create))
+            var pngBuffers = new byte[bitmaps.Length][];
+            for (int i = 0; i < bitmaps.Length; i++)
             {
-                // ICO header
-                fs.WriteByte(0); fs.WriteByte(0);
-                fs.WriteByte(1); fs.WriteByte(0);
-                fs.WriteByte(1); fs.WriteByte(0); // 1 image
+                using var ms = new MemoryStream();
+                bitmaps[i].Save(ms, ImageFormat.Png);
+                pngBuffers[i] = ms.ToArray();
+            }
 
-                int width = bitmap.Width;
-                int height = bitmap.Height;
-                if (width >= 256) width = 0;
-                if (height >= 256) height = 0;
+            using var fs = new FileStream(filePath, FileMode.Create);
+            // ICO Header
+            fs.WriteByte(0); fs.WriteByte(0); // Reserved
+            fs.WriteByte(1); fs.WriteByte(0); // Type 1 = Icon
+            short count = (short)bitmaps.Length;
+            fs.WriteByte((byte)(count & 0xFF));
+            fs.WriteByte((byte)((count >> 8) & 0xFF));
 
-                fs.WriteByte((byte)width);
-                fs.WriteByte((byte)height);
-                fs.WriteByte(0);
-                fs.WriteByte(0);
-                fs.WriteByte(0); fs.WriteByte(0);
-                fs.WriteByte(32); fs.WriteByte(0); // 32 bpp
+            int currentOffset = 6 + (bitmaps.Length * 16);
 
-                using (MemoryStream ms = new MemoryStream())
-                {
-                    bitmap.Save(ms, ImageFormat.Png);
-                    byte[] pngData = ms.ToArray();
+            // Write directory entries
+            for (int i = 0; i < bitmaps.Length; i++)
+            {
+                int s = sizes[i];
+                byte w = (byte)(s >= 256 ? 0 : s);
+                byte h = (byte)(s >= 256 ? 0 : s);
 
-                    int size = pngData.Length;
-                    fs.WriteByte((byte)(size & 0xFF));
-                    fs.WriteByte((byte)((size >> 8) & 0xFF));
-                    fs.WriteByte((byte)((size >> 16) & 0xFF));
-                    fs.WriteByte((byte)((size >> 24) & 0xFF));
+                fs.WriteByte(w);
+                fs.WriteByte(h);
+                fs.WriteByte(0); // Colors
+                fs.WriteByte(0); // Reserved
+                fs.WriteByte(1); fs.WriteByte(0); // Color planes
+                fs.WriteByte(32); fs.WriteByte(0); // Bits per pixel
 
-                    // Offset of image data
-                    int offset = 22;
-                    fs.WriteByte((byte)(offset & 0xFF));
-                    fs.WriteByte((byte)((offset >> 8) & 0xFF));
-                    fs.WriteByte((byte)((offset >> 16) & 0xFF));
-                    fs.WriteByte((byte)((offset >> 24) & 0xFF));
+                int len = pngBuffers[i].Length;
+                fs.WriteByte((byte)(len & 0xFF));
+                fs.WriteByte((byte)((len >> 8) & 0xFF));
+                fs.WriteByte((byte)((len >> 16) & 0xFF));
+                fs.WriteByte((byte)((len >> 24) & 0xFF));
 
-                    fs.Write(pngData, 0, size);
-                }
+                fs.WriteByte((byte)(currentOffset & 0xFF));
+                fs.WriteByte((byte)((currentOffset >> 8) & 0xFF));
+                fs.WriteByte((byte)((currentOffset >> 16) & 0xFF));
+                fs.WriteByte((byte)((currentOffset >> 24) & 0xFF));
+
+                currentOffset += len;
+            }
+
+            // Write image data
+            for (int i = 0; i < bitmaps.Length; i++)
+            {
+                fs.Write(pngBuffers[i], 0, pngBuffers[i].Length);
             }
         }
     }

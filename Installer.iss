@@ -17,6 +17,7 @@ DisableProgramGroupPage=yes
 ; Output installer executable name
 OutputBaseFilename=BIMPlus_Setup
 SetupIconFile=BIM Plus.ico
+UninstallDisplayIcon={app}\AutoPileCap\BIM Plus.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -32,6 +33,9 @@ Name: "{app}\AutoPileCap"; Permissions: users-full
 [Files]
 ; Copy the .addin manifest file directly to the Addins\2026 folder
 Source: "AutoPileCap.addin"; DestDir: "{app}"; Flags: ignoreversion
+
+; Copy the application logo icon for Control Panel Add/Remove Programs
+Source: "BIM Plus.ico"; DestDir: "{app}\AutoPileCap"; Flags: ignoreversion
 
 ; Copy all compiled DLLs to a subfolder named AutoPileCap inside the Addins\2026 folder
 Source: "bin\Release\net8.0-windows\*"; DestDir: "{app}\AutoPileCap"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb, Mapping.txt, Obfuscated\*"

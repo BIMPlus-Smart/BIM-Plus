@@ -43,16 +43,19 @@ namespace AutoPileCap.Services
                 if (string.IsNullOrEmpty(pluginDir))
                     return;
 
-                // 1. Delete previous .old file if it was released by Revit
-                string oldDllPath = Path.Combine(pluginDir, "AutoPileCap.dll.old");
-                if (File.Exists(oldDllPath))
+                // 1. Delete previous .old files if released by Revit
+                try
                 {
-                    try { File.Delete(oldDllPath); } catch { /* in use or locked */ }
+                    foreach (var old in Directory.GetFiles(pluginDir, "*.old"))
+                    {
+                        try { File.Delete(old); } catch { /* locked or in use */ }
+                    }
                 }
+                catch { }
 
                 // 2. Query remote version manifest
                 using var client = new HttpClient();
-                client.Timeout = TimeSpan.FromSeconds(10);
+                client.Timeout = TimeSpan.FromSeconds(15);
                 client.DefaultRequestHeaders.Add("User-Agent", "BIMPlus-AutoUpdater");
 
                 string jsonContent = await client.GetStringAsync(UpdateManifestUrl).ConfigureAwait(false);
@@ -67,17 +70,20 @@ namespace AutoPileCap.Services
 
                 // 3. Compare remote version with current version
                 Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0, 0);
-                if (!Version.TryParse(updateInfo.Version, out Version? remoteVersion))
+                if (!Version.TryParse(updateInfo.Version, out Version? parsedRemoteVersion))
                     return;
 
-                if (remoteVersion <= currentVersion)
+                Version remoteVersion = NormalizeVersion(parsedRemoteVersion);
+                Version localVersion = NormalizeVersion(currentVersion);
+
+                if (remoteVersion <= localVersion)
                 {
                     // Already up to date
                     return;
                 }
 
                 // 4. Download new DLL to temporary file
-                string tempDllPath = Path.Combine(pluginDir, "AutoPileCap.dll.tmp");
+                string tempDllPath = Path.Combine(pluginDir, $"AutoPileCap_{DateTime.UtcNow.Ticks}.tmp");
                 byte[] newDllBytes = await client.GetByteArrayAsync(updateInfo.DllUrl).ConfigureAwait(false);
 
                 // Basic validation: Revit plugins are at least ~500KB
@@ -88,12 +94,8 @@ namespace AutoPileCap.Services
 
                 // 5. Safely replace current DLL using Windows atomic rename
                 // Windows allows renaming an executing DLL.
-                if (File.Exists(oldDllPath))
-                {
-                    try { File.Delete(oldDllPath); } catch { }
-                }
-
-                File.Move(currentDllPath, oldDllPath, true);
+                string backupOldPath = Path.Combine(pluginDir, $"AutoPileCap_{DateTime.UtcNow.Ticks}.old");
+                File.Move(currentDllPath, backupOldPath, true);
                 File.Move(tempDllPath, currentDllPath, true);
 
                 // Done silently! Next time Revit opens, it loads the new updated version automatically.
@@ -102,6 +104,15 @@ namespace AutoPileCap.Services
             {
                 // Silently ignore all network/file errors so Revit never crashes
             }
+        }
+
+        private static Version NormalizeVersion(Version v)
+        {
+            return new Version(
+                Math.Max(0, v.Major),
+                Math.Max(0, v.Minor),
+                Math.Max(0, v.Build),
+                Math.Max(0, v.Revision));
         }
     }
 }

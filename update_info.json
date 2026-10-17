@@ -1,5 +1,5 @@
 {
-  "version": "1.1.4",
+  "version": "1.1.5",
   "dllUrl": "https://raw.githubusercontent.com/BIMPlus-Smart/BIM-Plus/main/bin/Release/net8.0-windows/AutoPileCap.dll",
-  "notes": "Full 3D realistic rebar cage icon for Slab Rebar matching Wall Rebar style"
+  "notes": "Full 3D realistic rebar cage icon for Slab Rebar and enhanced background auto-update engine"
 }

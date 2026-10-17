@@ -14,7 +14,7 @@
     <RevitVersion>2026</RevitVersion>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <Version>1.1.4</Version>
+    <Version>1.1.5</Version>
     <Authors>Phearak</Authors>
     <Company>AutoPileCap</Company>
     <Product>Auto Pile Cap for Autodesk Revit 2026</Product>

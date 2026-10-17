@@ -1,5 +1,5 @@
 #define MyAppName "AutoPileCap"
-#define MyAppVersion "1.1.4"
+#define MyAppVersion "1.1.5"
 #define MyAppPublisher "Phearak"
 #define RevitVersion "2026"
 
@@ -21,6 +21,10 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
+
+[Dirs]
+; Ensure standard users have full modify access to AutoPileCap folder so silent background auto-updates work without admin prompt
+Name: "{app}\{#MyAppName}"; Permissions: users-full
 
 [Files]
 ; Copy the .addin manifest file directly to the Addins\2026 folder

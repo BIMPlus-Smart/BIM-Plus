@@ -1,5 +1,5 @@
 #define MyAppName "AutoPileCap"
-#define MyAppVersion "1.1.2"
+#define MyAppVersion "1.1.3"
 #define MyAppPublisher "Phearak"
 #define RevitVersion "2026"
 

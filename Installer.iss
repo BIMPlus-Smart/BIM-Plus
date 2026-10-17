@@ -20,6 +20,9 @@ SetupIconFile=BIM Plus.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+DisableWelcomePage=no
+WizardImageFile=Resources\wizard_banner.bmp
+WizardSmallImageFile=Resources\wizard_small.bmp
 PrivilegesRequired=admin
 
 [Dirs]
@@ -40,12 +43,24 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""$xml
 [Messages]
 SetupAppTitle=Setup - {#MyAppName}
 SetupWindowTitle=Setup - {#MyAppName}
+WelcomeLabel1=Welcome to {#MyAppName} Setup
+WelcomeLabel2=This will install {#MyAppName} for Autodesk Revit {#RevitVersion} on your computer.%n%nIt is recommended that you close Autodesk Revit before continuing.
+FinishedHeadingLabel=Completing the {#MyAppName} Setup Wizard
+FinishedLabelNoIcons=Setup has finished installing {#MyAppName} on your computer.%n%nYou can now open Autodesk Revit {#RevitVersion} to access the "%1" tab.
+FinishedLabel=Setup has finished installing {#MyAppName} on your computer.%n%nYou can now open Autodesk Revit {#RevitVersion} to access the "%1" tab.
+ClickFinish=Click Finish to exit Setup.
 
 [Code]
-// Check if Revit is running and warn the user
+procedure InitializeWizard;
+begin
+  WizardForm.Font.Name := 'Segoe UI';
+  WizardForm.WelcomeLabel1.Font.Size := 13;
+  WizardForm.WelcomeLabel1.Font.Style := [fsBold];
+  WizardForm.FinishedHeadingLabel.Font.Size := 13;
+  WizardForm.FinishedHeadingLabel.Font.Style := [fsBold];
+end;
+
 function InitializeSetup(): Boolean;
 begin
   Result := True;
-  // It's a good practice to ensure Revit is closed before installing plugins
-  // so the DLLs aren't locked and the plugin loads fresh when Revit starts.
 end;

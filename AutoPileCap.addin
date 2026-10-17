@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RevitAddIns>
   <AddIn Type="Application">
-    <Name>AutoPileCap</Name>
+    <Name>BIM Plus⁺</Name>
     <Assembly>AutoPileCap\AutoPileCap.dll</Assembly>
     <FullClassName>AutoPileCap.App</FullClassName>
     <ClientId>B8466657-6A57-4E28-8B4F-3498965E9A92</ClientId>
     <VendorId>AUTOPCAP</VendorId>
-    <VendorDescription>Auto Pile Cap Plugin for Autodesk Revit 2026</VendorDescription>
+    <VendorDescription>BIM Plus⁺ Plugin for Autodesk Revit 2026</VendorDescription>
   </AddIn>
 </RevitAddIns>

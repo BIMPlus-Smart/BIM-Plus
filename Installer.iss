@@ -1,4 +1,4 @@
-#define MyAppName "AutoPileCap"
+#define MyAppName "BIM Plus⁺"
 #define MyAppVersion "1.1.5"
 #define MyAppPublisher "Phearak"
 #define RevitVersion "2026"
@@ -24,18 +24,18 @@ PrivilegesRequired=admin
 
 [Dirs]
 ; Ensure standard users have full modify access to AutoPileCap folder so silent background auto-updates work without admin prompt
-Name: "{app}\{#MyAppName}"; Permissions: users-full
+Name: "{app}\AutoPileCap"; Permissions: users-full
 
 [Files]
 ; Copy the .addin manifest file directly to the Addins\2026 folder
 Source: "AutoPileCap.addin"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Copy all compiled DLLs to a subfolder named AutoPileCap inside the Addins\2026 folder
-Source: "bin\Release\net8.0-windows\*"; DestDir: "{app}\{#MyAppName}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb, Mapping.txt, Obfuscated\*"
+Source: "bin\Release\net8.0-windows\*"; DestDir: "{app}\AutoPileCap"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb, Mapping.txt, Obfuscated\*"
 
 [Run]
 ; Patch the .addin file to use the absolute path to the DLL to prevent Revit path resolution failures
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""$xml = [xml](Get-Content '{app}\AutoPileCap.addin'); $xml.RevitAddIns.AddIn.Assembly = '{app}\{#MyAppName}\AutoPileCap.dll'; $xml.Save('{app}\AutoPileCap.addin')"""; Flags: runhidden
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""$xml = [xml](Get-Content '{app}\AutoPileCap.addin'); $xml.RevitAddIns.AddIn.Assembly = '{app}\AutoPileCap\AutoPileCap.dll'; $xml.Save('{app}\AutoPileCap.addin')"""; Flags: runhidden
 
 [Messages]
 SetupAppTitle=Setup - {#MyAppName}

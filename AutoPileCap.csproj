@@ -16,9 +16,9 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Version>1.1.5</Version>
     <Authors>Phearak</Authors>
-    <Company>AutoPileCap</Company>
-    <Product>Auto Pile Cap for Autodesk Revit 2026</Product>
-    <Description>Automated Structural Pile Cap and Pile Placement Plugin for Revit 2026</Description>
+    <Company>BIM Plus</Company>
+    <Product>BIM Plus⁺ for Autodesk Revit 2026</Product>
+    <Description>BIM Plus⁺ Structural Plugin for Autodesk Revit 2026</Description>
   </PropertyGroup>
 
   <!-- Revit 2026 API References: Fallback to local Revit 2026 directory if present, otherwise use Nice3point NuGet packages -->

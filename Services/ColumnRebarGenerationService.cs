@@ -92,7 +92,7 @@ namespace AutoPileCap.Services
                 try
                 {
                     // Create vertical lines directly in global coordinate system if they are vertical
-                    Rebar rebar = Rebar.CreateFromCurves(doc, RebarStyle.Standard, vertBarType, botHook, topHook, column, XYZ.BasisX, new List<Curve> { curve }, RebarHookOrientation.Left, RebarHookOrientation.Left, true, true);
+                    Rebar rebar = RebarCreationHelper.CreateFromCurves(doc, RebarStyle.Standard, vertBarType, botHook, topHook, column, XYZ.BasisX, new List<Curve> { curve }, hookStartRight: false, hookEndRight: false, useExistingShapeIfPossible: true, createNewShape: true);
                     SetRebarVisibility(doc, rebar);
                     
                     if (config.BottomIsCrank)
@@ -170,7 +170,7 @@ namespace AutoPileCap.Services
 
                 try
                 {
-                    Rebar tie = Rebar.CreateFromCurves(doc, RebarStyle.StirrupTie, tieBarType, hookType, hookType, column, XYZ.BasisZ, curves, RebarHookOrientation.Left, RebarHookOrientation.Left, true, true);
+                    Rebar tie = RebarCreationHelper.CreateFromCurves(doc, RebarStyle.StirrupTie, tieBarType, hookType, hookType, column, XYZ.BasisZ, curves, hookStartRight: false, hookEndRight: false, useExistingShapeIfPossible: true, createNewShape: true);
                     
                     double arrayLength = tieTopZ - tieBotZ;
                     if (arrayLength > 0 && tie.IsRebarShapeDriven())

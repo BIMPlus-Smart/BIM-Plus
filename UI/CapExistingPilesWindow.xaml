@@ -1,7 +1,7 @@
 <Window x:Class="AutoPileCap.UI.CapExistingPilesWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Cap Over Existing Piles - Revit 2026"
+        Title="Cap Over Existing Piles - BIM Plus⁺"
         Height="540" Width="600"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"

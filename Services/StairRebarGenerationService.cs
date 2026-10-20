@@ -279,7 +279,7 @@ namespace AutoPileCap.Services
         {
             try
             {
-                Rebar rebar = Rebar.CreateFromCurves(
+                Rebar rebar = RebarCreationHelper.CreateFromCurves(
                     doc,
                     RebarStyle.Standard,
                     barType,
@@ -287,9 +287,10 @@ namespace AutoPileCap.Services
                     host,
                     arrayNormal,
                     curves,
-                    RebarHookOrientation.Right,
-                    RebarHookOrientation.Right,
-                    true, true);
+                    hookStartRight: true,
+                    hookEndRight: true,
+                    useExistingShapeIfPossible: true,
+                    createNewShape: true);
 
                 if (rebar != null)
                 {
@@ -314,7 +315,7 @@ namespace AutoPileCap.Services
                     {
                         Transform trans = Transform.CreateTranslation(offset * arrayNormal);
                         var transCurves = curves.Select(c => c.CreateTransformed(trans)).ToList();
-                        Rebar singleBar = Rebar.CreateFromCurves(
+                        Rebar singleBar = RebarCreationHelper.CreateFromCurves(
                             doc,
                             RebarStyle.Standard,
                             barType,
@@ -322,9 +323,10 @@ namespace AutoPileCap.Services
                             host,
                             arrayNormal,
                             transCurves,
-                            RebarHookOrientation.Right,
-                            RebarHookOrientation.Right,
-                            true, true);
+                            hookStartRight: true,
+                            hookEndRight: true,
+                            useExistingShapeIfPossible: true,
+                            createNewShape: true);
 
                         if (singleBar != null)
                         {
@@ -344,7 +346,7 @@ namespace AutoPileCap.Services
         {
             try
             {
-                Rebar rebar = Rebar.CreateFromCurves(
+                Rebar rebar = RebarCreationHelper.CreateFromCurves(
                     doc,
                     RebarStyle.Standard,
                     barType,
@@ -352,9 +354,10 @@ namespace AutoPileCap.Services
                     host,
                     normal,
                     curves,
-                    RebarHookOrientation.Right,
-                    RebarHookOrientation.Right,
-                    true, true);
+                    hookStartRight: true,
+                    hookEndRight: true,
+                    useExistingShapeIfPossible: true,
+                    createNewShape: true);
 
                 if (rebar != null)
                 {

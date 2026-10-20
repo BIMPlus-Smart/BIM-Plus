@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFrameworks>net8.0-windows;net10.0-windows</TargetFrameworks>
     <UseWPF>true</UseWPF>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -11,39 +11,79 @@
     <Configurations>Debug;Release</Configurations>
     <AssemblyName>AutoPileCap</AssemblyName>
     <RootNamespace>AutoPileCap</RootNamespace>
-    <RevitVersion>2026</RevitVersion>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <Version>1.1.5</Version>
+    <Version>1.1.6</Version>
     <Authors>Phearak</Authors>
     <Company>BIM Plus</Company>
+  </PropertyGroup>
+
+  <!-- Revit 2026 Settings -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <RevitVersion>2026</RevitVersion>
+    <DefineConstants>$(DefineConstants);REVIT2026</DefineConstants>
     <Product>BIM Plus⁺ for Autodesk Revit 2026</Product>
     <Description>BIM Plus⁺ Structural Plugin for Autodesk Revit 2026</Description>
   </PropertyGroup>
 
-  <!-- Revit 2026 API References: Fallback to local Revit 2026 directory if present, otherwise use Nice3point NuGet packages -->
+  <!-- Revit 2027 Settings -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <RevitVersion>2027</RevitVersion>
+    <DefineConstants>$(DefineConstants);REVIT2027</DefineConstants>
+    <Product>BIM Plus⁺ for Autodesk Revit 2027</Product>
+    <Description>BIM Plus⁺ Structural Plugin for Autodesk Revit 2027</Description>
+  </PropertyGroup>
+
+  <!-- Revit 2026 API References -->
   <Choose>
-    <When Condition="Exists('C:\Program Files\Autodesk\Revit 2026\RevitAPI.dll')">
-      <ItemGroup>
-        <Reference Include="RevitAPI">
-          <HintPath>C:\Program Files\Autodesk\Revit 2026\RevitAPI.dll</HintPath>
-          <Private>False</Private>
-        </Reference>
-        <Reference Include="RevitAPIUI">
-          <HintPath>C:\Program Files\Autodesk\Revit 2026\RevitAPIUI.dll</HintPath>
-          <Private>False</Private>
-        </Reference>
-      </ItemGroup>
+    <When Condition="'$(TargetFramework)' == 'net8.0-windows'">
+      <Choose>
+        <When Condition="Exists('C:\Program Files\Autodesk\Revit 2026\RevitAPI.dll')">
+          <ItemGroup>
+            <Reference Include="RevitAPI">
+              <HintPath>C:\Program Files\Autodesk\Revit 2026\RevitAPI.dll</HintPath>
+              <Private>False</Private>
+            </Reference>
+            <Reference Include="RevitAPIUI">
+              <HintPath>C:\Program Files\Autodesk\Revit 2026\RevitAPIUI.dll</HintPath>
+              <Private>False</Private>
+            </Reference>
+          </ItemGroup>
+        </When>
+        <Otherwise>
+          <ItemGroup>
+            <PackageReference Include="Nice3point.Revit.Api.RevitApi" Version="2026.*" />
+            <PackageReference Include="Nice3point.Revit.Api.RevitApiUI" Version="2026.*" />
+          </ItemGroup>
+        </Otherwise>
+      </Choose>
     </When>
-    <Otherwise>
-      <ItemGroup>
-        <PackageReference Include="Nice3point.Revit.Api.RevitApi" Version="2026.*" />
-        <PackageReference Include="Nice3point.Revit.Api.RevitApiUI" Version="2026.*" />
-      </ItemGroup>
-    </Otherwise>
+    <!-- Revit 2027 API References -->
+    <When Condition="'$(TargetFramework)' == 'net10.0-windows'">
+      <Choose>
+        <When Condition="Exists('C:\Program Files\Autodesk\Revit 2027\RevitAPI.dll')">
+          <ItemGroup>
+            <Reference Include="RevitAPI">
+              <HintPath>C:\Program Files\Autodesk\Revit 2027\RevitAPI.dll</HintPath>
+              <Private>False</Private>
+            </Reference>
+            <Reference Include="RevitAPIUI">
+              <HintPath>C:\Program Files\Autodesk\Revit 2027\RevitAPIUI.dll</HintPath>
+              <Private>False</Private>
+            </Reference>
+          </ItemGroup>
+        </When>
+        <Otherwise>
+          <ItemGroup>
+            <PackageReference Include="Nice3point.Revit.Api.RevitApi" Version="2027.*" />
+            <PackageReference Include="Nice3point.Revit.Api.RevitApiUI" Version="2027.*" />
+          </ItemGroup>
+        </Otherwise>
+      </Choose>
+    </When>
   </Choose>
 
-  <!-- Copy addin manifest on build -->
+  <!-- Embedded Resources for Ribbon Icons -->
   <ItemGroup>
     <EmbeddedResource Include="Resources\pile_cap_rebar.jpg" />
     <EmbeddedResource Include="Resources\auto_section_box.jpg" />
@@ -62,7 +102,7 @@
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)SignAndCopy.ps1&quot; -TargetDll &quot;$(TargetPath)&quot; -TargetDir &quot;$(TargetDir)\&quot;" />
+    <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(ProjectDir)SignAndCopy.ps1&quot; -TargetDll &quot;$(TargetPath)&quot; -TargetDir &quot;$(TargetDir)\&quot; -RevitVersion &quot;$(RevitVersion)&quot;" />
   </Target>
 
   <!-- Exclude nested project folders from main build -->

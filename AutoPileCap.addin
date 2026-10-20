@@ -6,6 +6,6 @@
     <FullClassName>AutoPileCap.App</FullClassName>
     <ClientId>B8466657-6A57-4E28-8B4F-3498965E9A92</ClientId>
     <VendorId>AUTOPCAP</VendorId>
-    <VendorDescription>BIM Plus⁺ Plugin for Autodesk Revit 2026</VendorDescription>
+    <VendorDescription>BIM Plus⁺ Structural Plugin for Autodesk Revit</VendorDescription>
   </AddIn>
 </RevitAddIns>

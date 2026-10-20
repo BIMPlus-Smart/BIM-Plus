@@ -1,7 +1,7 @@
 <Window x:Class="AutoPileCap.UI.AutoPileCapWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Auto Pile Cap Generator - Revit 2026"
+        Title="Auto Pile Cap Generator - BIM Plus⁺"
         Height="720" Width="680"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResizeWithGrip"

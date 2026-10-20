@@ -685,10 +685,9 @@ namespace AutoPileCap.Services
             try
             {
                 Rebar rebar = null;
-                #pragma warning disable CS0618
                 if (shape != null)
                 {
-                    rebar = Rebar.CreateFromCurvesAndShape(
+                    rebar = RebarCreationHelper.CreateFromCurvesAndShape(
                         _doc,
                         shape,
                         barType,
@@ -697,12 +696,12 @@ namespace AutoPileCap.Services
                         host,
                         arrayNormal,
                         curves,
-                        RebarHookOrientation.Right,
-                        RebarHookOrientation.Right);
+                        hookStartRight: true,
+                        hookEndRight: true);
                 }
                 else
                 {
-                    rebar = Rebar.CreateFromCurves(
+                    rebar = RebarCreationHelper.CreateFromCurves(
                         _doc,
                         style,
                         barType,
@@ -711,11 +710,11 @@ namespace AutoPileCap.Services
                         host,
                         arrayNormal,
                         curves,
-                        RebarHookOrientation.Right,
-                        RebarHookOrientation.Right,
-                        true, true);
+                        hookStartRight: true,
+                        hookEndRight: true,
+                        useExistingShapeIfPossible: true,
+                        createNewShape: true);
                 }
-                #pragma warning restore CS0618
 
                 if (rebar != null)
                 {

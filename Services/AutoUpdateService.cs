@@ -21,6 +21,8 @@ namespace AutoPileCap.Services
         {
             public string Version { get; set; } = "";
             public string DllUrl { get; set; } = "";
+            public string DllUrl2026 { get; set; } = "";
+            public string DllUrl2027 { get; set; } = "";
             public string Notes { get; set; } = "";
         }
 
@@ -65,7 +67,7 @@ namespace AutoPileCap.Services
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 var updateInfo = JsonSerializer.Deserialize<UpdateInfo>(jsonContent, options);
 
-                if (updateInfo == null || string.IsNullOrWhiteSpace(updateInfo.Version) || string.IsNullOrWhiteSpace(updateInfo.DllUrl))
+                if (updateInfo == null || string.IsNullOrWhiteSpace(updateInfo.Version))
                     return;
 
                 // 3. Compare remote version with current version
@@ -82,9 +84,26 @@ namespace AutoPileCap.Services
                     return;
                 }
 
+                // Select version-specific DLL url
+                string targetDownloadUrl = "";
+#if REVIT2027
+                if (!string.IsNullOrWhiteSpace(updateInfo.DllUrl2027))
+                    targetDownloadUrl = updateInfo.DllUrl2027;
+                else
+                    targetDownloadUrl = updateInfo.DllUrl;
+#else
+                if (!string.IsNullOrWhiteSpace(updateInfo.DllUrl2026))
+                    targetDownloadUrl = updateInfo.DllUrl2026;
+                else
+                    targetDownloadUrl = updateInfo.DllUrl;
+#endif
+
+                if (string.IsNullOrWhiteSpace(targetDownloadUrl))
+                    return;
+
                 // 4. Download new DLL to temporary file
                 string tempDllPath = Path.Combine(pluginDir, $"AutoPileCap_{DateTime.UtcNow.Ticks}.tmp");
-                byte[] newDllBytes = await client.GetByteArrayAsync(updateInfo.DllUrl).ConfigureAwait(false);
+                byte[] newDllBytes = await client.GetByteArrayAsync(targetDownloadUrl).ConfigureAwait(false);
 
                 // Basic validation: Revit plugins are at least ~500KB
                 if (newDllBytes == null || newDllBytes.Length < 100 * 1024)

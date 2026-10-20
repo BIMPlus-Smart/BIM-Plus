@@ -1,0 +1,28 @@
+<?xml version='1.0'?>
+<Obfuscator>
+  <Var name="InPath" value=".\bin\Release\net10.0-windows" />
+  <Var name="OutPath" value=".\bin\Release\net10.0-windows\Obfuscated" />
+  <Var name="KeepPublicApi" value="true" />
+  <Var name="HidePrivateApi" value="true" />
+  <Var name="RenameProperties" value="false" />
+  <Var name="RenameFields" value="true" />
+  <Var name="RenameEvents" value="true" />
+  <Var name="SuppressIldasm" value="true" />
+
+  <AssemblySearchPath path="C:\Program Files\Autodesk\Revit 2027" />
+  <AssemblySearchPath path="C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App\10.0.12" />
+  <AssemblySearchPath path="C:\Program Files\dotnet\shared\Microsoft.NETCore.App\10.0.12" />
+
+  <Module file="$(InPath)\AutoPileCap.dll">
+    <!-- Revit requires IExternalApplication and IExternalCommand classes and their methods to maintain exact signatures -->
+    <SkipType name="AutoPileCap.App" skipMethods="true" skipProperties="true" skipFields="true" />
+    <SkipType name="AutoPileCap.Commands.*" skipMethods="true" skipProperties="true" skipFields="true" />
+    <!-- WPF Windows and Event Handlers link to XAML / Revit by type name and member names -->
+    <SkipType name="AutoPileCap.UI.*" skipMethods="true" skipProperties="true" skipFields="true" />
+    <SkipType name="AutoPileCap.Handlers.*" skipMethods="true" skipProperties="true" skipFields="true" />
+    <SkipNamespace name="AutoPileCap.Models" />
+    <SkipType name="AutoPileCap.Models.*" skipMethods="true" skipProperties="true" skipFields="true" />
+    <SkipNamespace name="AutoPileCap.Services" />
+    <SkipType name="AutoPileCap.Services.*" skipMethods="true" skipProperties="true" skipFields="true" />
+  </Module>
+</Obfuscator>

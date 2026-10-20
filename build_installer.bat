@@ -1,12 +1,12 @@
 @echo off
 setlocal
 echo =======================================================
-echo    Auto Pile Cap - Build and Create Installer
+echo    BIM Plus (Revit 2026 & 2027) - Build and Installer
 echo =======================================================
 
 cd /d "%~dp0"
 
-echo [1/2] Building the Revit Plugin (Release mode)...
+echo [1/2] Building the Revit Plugin for 2026 and 2027 (Release mode)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "dotnet build AutoPileCap.csproj -c Release"
 
 if %ERRORLEVEL% NEQ 0 (
@@ -17,7 +17,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo [1.5/2] Obfuscating code with Obfuscar to protect against hackers...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$exe = \"$env:USERPROFILE\.nuget\packages\obfuscar\2.2.50\tools\Obfuscar.Console.exe\"; if (Test-Path $exe) { & $exe \"%~dp0obfuscar.xml\"; Copy-Item \"%~dp0bin\Release\net8.0-windows\Obfuscated\AutoPileCap.dll\" \"%~dp0bin\Release\net8.0-windows\AutoPileCap.dll\" -Force; Write-Host '[SUCCESS] Assembly obfuscated successfully!' -ForegroundColor Green }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$exe = \"$env:USERPROFILE\.nuget\packages\obfuscar\2.2.50\tools\Obfuscar.Console.exe\"; if (Test-Path $exe) { & $exe \"%~dp0obfuscar.xml\"; Copy-Item \"%~dp0bin\Release\net8.0-windows\Obfuscated\AutoPileCap.dll\" \"%~dp0bin\Release\net8.0-windows\AutoPileCap.dll\" -Force; & $exe \"%~dp0obfuscar_2027.xml\"; Copy-Item \"%~dp0bin\Release\net10.0-windows\Obfuscated\AutoPileCap.dll\" \"%~dp0bin\Release\net10.0-windows\AutoPileCap.dll\" -Force; Write-Host '[SUCCESS] Assemblies obfuscated successfully!' -ForegroundColor Green }"
 
 echo.
 echo [2/2] Compiling Installer using Inno Setup...

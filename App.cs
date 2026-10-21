@@ -127,19 +127,6 @@ namespace AutoPileCap
             };
             partitionPanel.AddItem(btnPartitionRebarData);
 
-            // Silent background auto-updater: checks online manifest and updates DLL seamlessly
-            _ = System.Threading.Tasks.Task.Run(async () =>
-            {
-                try
-                {
-                    await AutoPileCap.Services.AutoUpdateService.CheckAndApplyUpdateSilentlyAsync().ConfigureAwait(false);
-                }
-                catch
-                {
-                    // Ignore all errors to guarantee Revit stability
-                }
-            });
-
             return Result.Succeeded;
         }
 

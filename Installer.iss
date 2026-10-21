@@ -33,11 +33,6 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 Name: "revit2026"; Description: "Autodesk Revit 2026 (.NET 8.0)"; Types: full custom
 Name: "revit2027"; Description: "Autodesk Revit 2027 (.NET 10.0)"; Types: full custom
 
-[Dirs]
-; Ensure standard users have full modify access to AutoPileCap folder so silent background auto-updates work without admin prompt
-Name: "{commonappdata}\Autodesk\Revit\Addins\2026\AutoPileCap"; Permissions: users-full; Components: revit2026
-Name: "{commonappdata}\Autodesk\Revit\Addins\2027\AutoPileCap"; Permissions: users-full; Components: revit2027
-
 [Files]
 ; --- Revit 2026 (.NET 8.0) ---
 Source: "AutoPileCap.addin"; DestDir: "{commonappdata}\Autodesk\Revit\Addins\2026"; Components: revit2026; Flags: ignoreversion
@@ -45,14 +40,14 @@ Source: "BIM Plus.ico"; DestDir: "{commonappdata}\Autodesk\Revit\Addins\2026\Aut
 Source: "bin\Release\net8.0-windows\*"; DestDir: "{commonappdata}\Autodesk\Revit\Addins\2026\AutoPileCap"; Components: revit2026; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb, Mapping.txt, Obfuscated\*"
 
 ; --- Revit 2027 (.NET 10.0) ---
-Source: "AutoPileCap.addin"; DestDir: "{commonappdata}\Autodesk\Revit\Addins\2027"; Components: revit2027; Flags: ignoreversion
-Source: "BIM Plus.ico"; DestDir: "{commonappdata}\Autodesk\Revit\Addins\2027\AutoPileCap"; Components: revit2027; Flags: ignoreversion
-Source: "bin\Release\net10.0-windows\*"; DestDir: "{commonappdata}\Autodesk\Revit\Addins\2027\AutoPileCap"; Components: revit2027; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb, Mapping.txt, Obfuscated\*"
+Source: "AutoPileCap.addin"; DestDir: "{commonpf64}\Autodesk\Revit\Addins\2027"; Components: revit2027; Flags: ignoreversion
+Source: "BIM Plus.ico"; DestDir: "{commonpf64}\Autodesk\Revit\Addins\2027\AutoPileCap"; Components: revit2027; Flags: ignoreversion
+Source: "bin\Release\net10.0-windows\*"; DestDir: "{commonpf64}\Autodesk\Revit\Addins\2027\AutoPileCap"; Components: revit2027; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb, Mapping.txt, Obfuscated\*"
 
 [Run]
 ; Patch the .addin files to use the absolute path to the DLL to prevent Revit path resolution failures
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""$xml = [xml](Get-Content '{commonappdata}\Autodesk\Revit\Addins\2026\AutoPileCap.addin'); $xml.RevitAddIns.AddIn.Assembly = '{commonappdata}\Autodesk\Revit\Addins\2026\AutoPileCap\AutoPileCap.dll'; $xml.Save('{commonappdata}\Autodesk\Revit\Addins\2026\AutoPileCap.addin')"""; Components: revit2026; Flags: runhidden
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""$xml = [xml](Get-Content '{commonappdata}\Autodesk\Revit\Addins\2027\AutoPileCap.addin'); $xml.RevitAddIns.AddIn.Assembly = '{commonappdata}\Autodesk\Revit\Addins\2027\AutoPileCap\AutoPileCap.dll'; $xml.Save('{commonappdata}\Autodesk\Revit\Addins\2027\AutoPileCap.addin')"""; Components: revit2027; Flags: runhidden
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""$xml = [xml](Get-Content '{commonpf64}\Autodesk\Revit\Addins\2027\AutoPileCap.addin'); $xml.RevitAddIns.AddIn.Assembly = '{commonpf64}\Autodesk\Revit\Addins\2027\AutoPileCap\AutoPileCap.dll'; $xml.Save('{commonpf64}\Autodesk\Revit\Addins\2027\AutoPileCap.addin')"""; Components: revit2027; Flags: runhidden
 
 [Messages]
 SetupAppTitle=Setup - {#MyAppName}

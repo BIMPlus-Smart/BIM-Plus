@@ -1,7 +1,0 @@
-{
-  "version": "1.1.6",
-  "dllUrl": "https://raw.githubusercontent.com/BIMPlus-Smart/BIM-Plus/main/bin/Release/net8.0-windows/AutoPileCap.dll",
-  "dllUrl2026": "https://raw.githubusercontent.com/BIMPlus-Smart/BIM-Plus/main/bin/Release/net8.0-windows/AutoPileCap.dll",
-  "dllUrl2027": "https://raw.githubusercontent.com/BIMPlus-Smart/BIM-Plus/main/bin/Release/net10.0-windows/AutoPileCap.dll",
-  "notes": "Support for Autodesk Revit 2026 and Autodesk Revit 2027"
-}

@@ -34,7 +34,6 @@ Professional structural reinforcement plugin built for **Autodesk Revit 2026** (
 3. **Multi-Targeting Architecture**:
    - **Revit 2026**: Built with `net8.0-windows` targeting Revit 2026 API.
    - **Revit 2027**: Built with `net10.0-windows` targeting Revit 2027 API (`BarTerminationsData` & `RebarTerminationOrientation`).
-   - Seamless background auto-update engine compatible with both versions.
 
 ---
 

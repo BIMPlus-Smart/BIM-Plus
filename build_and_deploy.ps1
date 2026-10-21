@@ -1,5 +1,7 @@
 # BIM Plus for Revit 2026 & 2027 - Build and Deployment Script
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "   BIM Plus Plugin - Revit 2026 & 2027 Deployer   " -ForegroundColor Cyan
@@ -120,8 +122,8 @@ function Deploy-RevitVersion([string]$revitVer, [string]$targetFramework) {
 Deploy-RevitVersion -revitVer "2026" -targetFramework "net8.0-windows"
 Deploy-RevitVersion -revitVer "2027" -targetFramework "net10.0-windows"
 
-# 4. Automatically push to GitHub for clients
-Write-Host "`n[4/4] Pushing update to GitHub for automatic client updates..." -ForegroundColor Yellow
+# 4. Push build to GitHub
+Write-Host "`n[4/4] Pushing build to GitHub repository..." -ForegroundColor Yellow
 $gitCmd = "$env:LOCALAPPDATA\GitHubDesktop\app-3.6.7\resources\app\git\cmd\git.exe"
 if (-not (Test-Path $gitCmd)) {
     $gitCmd = (Get-ChildItem "$env:LOCALAPPDATA\GitHubDesktop" -Filter "git.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
@@ -129,19 +131,20 @@ if (-not (Test-Path $gitCmd)) {
 
 if ($gitCmd -and (Test-Path $gitCmd)) {
     try {
-        & $gitCmd add -f "bin/Release/net8.0-windows/AutoPileCap.dll" "bin/Release/net10.0-windows/AutoPileCap.dll" "update_info.json"
+        & $gitCmd add -f "bin/Release/net8.0-windows/AutoPileCap.dll" "bin/Release/net10.0-windows/AutoPileCap.dll"
         & $gitCmd add .
-        & $gitCmd commit -m "Auto update for Revit 2026 & 2027 $(Get-Date -Format 'yyyy-MM-dd HH:mm')" -q
-        $pushProc = Start-Process $gitCmd -ArgumentList "push origin main" -NoNewWindow -PassThru
-        if ($pushProc.WaitForExit(15000)) {
+        & $gitCmd commit -m "Build update for Revit 2026 & 2027 $(Get-Date -Format 'yyyy-MM-dd HH:mm')" -q
+        $env:GIT_TERMINAL_PROMPT = "0"
+        $pushProc = Start-Process $gitCmd -ArgumentList "-c credential.helper= push origin main" -NoNewWindow -PassThru
+        if ($pushProc.WaitForExit(10000)) {
             if ($pushProc.ExitCode -eq 0) {
-                Write-Host "Pushed update to GitHub! Clients will auto-update when opening Revit." -ForegroundColor Green
+                Write-Host "Pushed build to GitHub successfully!" -ForegroundColor Green
             } else {
-                Write-Host "Note: git push completed with code $($pushProc.ExitCode)." -ForegroundColor Yellow
+                Write-Host "Note: To sync this build to GitHub, open GitHub Desktop and click 'Push origin'." -ForegroundColor Yellow
             }
         } else {
             $pushProc.Kill()
-            Write-Host "Note: git push timed out waiting for credentials. Open GitHub Desktop and click 'Push origin'." -ForegroundColor Yellow
+            Write-Host "Note: git push timed out. Open GitHub Desktop and click 'Push origin'." -ForegroundColor Yellow
         }
     } catch {
         Write-Host "Note: Could not push to GitHub: $_" -ForegroundColor Yellow

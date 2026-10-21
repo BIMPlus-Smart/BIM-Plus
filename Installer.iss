@@ -14,7 +14,7 @@ DisableDirPage=yes
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 ; Output installer executable name
-OutputBaseFilename=BIMPlus_Setup
+OutputBaseFilename=BIM Plus⁺_Setup
 SetupIconFile=BIM Plus.ico
 UninstallDisplayIcon={commonappdata}\Autodesk\Revit\Addins\2026\AutoPileCap\BIM Plus.ico
 Compression=lzma

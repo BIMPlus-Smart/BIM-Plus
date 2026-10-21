@@ -39,7 +39,7 @@ Professional structural reinforcement plugin built for **Autodesk Revit 2026** (
 
 ## 🚀 How to Run in Revit 2026 or 2027
 
-1. Build or deploy using `build_and_deploy.bat` or run installer from `Output\BIMPlus_Setup.exe`.
+1. Build or deploy using `build_and_deploy.bat` or run installer from `Output\BIM Plus⁺_Setup.exe`.
 2. Start **Autodesk Revit 2026** or **Autodesk Revit 2027** (or run `run_revit.bat`).
 3. Look at the top ribbon for the **`BIM Plus⁺`** tab.
 4. Enjoy designing and generating 3D rebar!
